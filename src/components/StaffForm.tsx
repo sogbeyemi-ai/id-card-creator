@@ -20,6 +20,7 @@ export interface StaffFormData {
 interface StaffFormProps {
   onSubmit: (data: StaffFormData) => void;
   isSubmitting: boolean;
+  onChange?: (data: StaffFormData) => void;
 }
 
 const companies = Constants.public.Enums.company_template;

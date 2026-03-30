@@ -36,6 +36,10 @@ const StaffForm = ({ onSubmit, isSubmitting, onChange }: StaffFormProps) => {
     photoPreview: null,
   });
 
+  useEffect(() => {
+    onChange?.(formData);
+  }, [formData, onChange]);
+
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {

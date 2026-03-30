@@ -25,7 +25,7 @@ interface StaffFormProps {
 
 const companies = Constants.public.Enums.company_template;
 
-const StaffForm = ({ onSubmit, isSubmitting }: StaffFormProps) => {
+const StaffForm = ({ onSubmit, isSubmitting, onChange }: StaffFormProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<StaffFormData>({
     fullName: "",

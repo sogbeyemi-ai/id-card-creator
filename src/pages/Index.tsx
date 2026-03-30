@@ -119,6 +119,7 @@ const Index = () => {
             <StaffForm
               onSubmit={handleSubmit}
               isSubmitting={isSubmitting}
+              onChange={setLivePreview}
             />
           </div>
 

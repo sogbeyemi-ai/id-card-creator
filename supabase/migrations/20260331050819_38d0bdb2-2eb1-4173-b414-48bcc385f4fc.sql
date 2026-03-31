@@ -1,0 +1,1 @@
+ALTER TABLE public.staff_entries ADD COLUMN state text;

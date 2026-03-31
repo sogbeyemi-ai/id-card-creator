@@ -1,4 +1,8 @@
 import { CompanyTemplate } from "./StaffForm";
+import logoSoti from "@/assets/logo-soti.png";
+import logoOpay from "@/assets/logo-opay.png";
+import logoBlueridge from "@/assets/logo-blueridge.png";
+import logoProten from "@/assets/logo-proten.png";
 
 interface IDCardPreviewProps {
   fullName: string;
@@ -10,92 +14,110 @@ interface IDCardPreviewProps {
 }
 
 const templateStyles: Record<CompanyTemplate, {
-  bg: string;
-  headerBg: string;
-  accentBar: string;
-  textColor: string;
-  labelColor: string;
-  companyName: string;
+  logo: string;
+  nameColor: string;
+  departmentColor: string;
+  roleColor: string;
+  footerBg: string;
+  footerText: string;
+  photoShape: "rectangular" | "circular";
+  photoBorderColor?: string;
 }> = {
   SOTI: {
-    bg: "bg-gradient-to-br from-[hsl(220,70%,15%)] to-[hsl(220,60%,25%)]",
-    headerBg: "bg-[hsl(45,90%,55%)]",
-    accentBar: "bg-[hsl(45,90%,55%)]",
-    textColor: "text-[hsl(0,0%,95%)]",
-    labelColor: "text-[hsl(45,90%,55%)]",
-    companyName: "SOTI",
+    logo: logoSoti,
+    nameColor: "text-[hsl(170,60%,35%)]",
+    departmentColor: "text-[hsl(170,60%,35%)]",
+    roleColor: "text-[hsl(220,15%,30%)]",
+    footerBg: "bg-[hsl(220,60%,15%)]",
+    footerText: "text-white",
+    photoShape: "rectangular",
   },
   OPAY: {
-    bg: "bg-gradient-to-br from-[hsl(170,80%,30%)] to-[hsl(170,60%,45%)]",
-    headerBg: "bg-[hsl(0,0%,100%)]",
-    accentBar: "bg-[hsl(170,80%,25%)]",
-    textColor: "text-[hsl(0,0%,100%)]",
-    labelColor: "text-[hsl(170,80%,80%)]",
-    companyName: "OPAY",
+    logo: logoOpay,
+    nameColor: "text-[hsl(160,70%,35%)]",
+    departmentColor: "text-[hsl(160,70%,35%)]",
+    roleColor: "text-[hsl(220,15%,25%)]",
+    footerBg: "bg-[hsl(168,55%,48%)]",
+    footerText: "text-white",
+    photoShape: "rectangular",
   },
   "Blue Ridge": {
-    bg: "bg-gradient-to-br from-[hsl(210,60%,40%)] to-[hsl(210,50%,55%)]",
-    headerBg: "bg-[hsl(0,0%,100%)]",
-    accentBar: "bg-[hsl(210,60%,30%)]",
-    textColor: "text-[hsl(0,0%,100%)]",
-    labelColor: "text-[hsl(210,40%,80%)]",
-    companyName: "Blue Ridge",
+    logo: logoBlueridge,
+    nameColor: "text-[hsl(225,100%,50%)]",
+    departmentColor: "text-[hsl(220,15%,25%)]",
+    roleColor: "text-[hsl(220,10%,40%)]",
+    footerBg: "bg-[hsl(225,100%,50%)]",
+    footerText: "text-white",
+    photoShape: "circular",
+    photoBorderColor: "border-[hsl(200,60%,75%)]",
   },
 };
 
-const IDCardPreview = ({ fullName, role, department, company, photoUrl, id }: IDCardPreviewProps) => {
+const IDCardPreview = ({ fullName, role, department, company, photoUrl }: IDCardPreviewProps) => {
   const style = templateStyles[company];
 
   return (
-    <div className={`relative w-full max-w-[340px] aspect-[85.6/54] rounded-xl overflow-hidden shadow-elevated animate-scale-in ${style.bg}`}>
-      {/* Accent bar */}
-      <div className={`absolute top-0 left-0 w-full h-1.5 ${style.accentBar}`} />
+    <div className="relative w-full max-w-[320px] bg-white rounded-lg overflow-hidden shadow-elevated animate-scale-in flex flex-col" style={{ aspectRatio: "2/3.2" }}>
+      {/* Company Logo */}
+      <div className="flex justify-center pt-6 pb-4 px-6">
+        <img
+          src={style.logo}
+          alt={company}
+          className="h-14 w-auto object-contain"
+        />
+      </div>
 
-      {/* Company header */}
-      <div className="absolute top-4 left-5 right-5 flex items-center justify-between">
-        <h3 className={`font-display text-lg font-bold tracking-tight ${style.textColor}`}>
-          {style.companyName}
-        </h3>
-        <span className={`text-[10px] font-medium uppercase tracking-widest ${style.labelColor}`}>
-          Staff ID
+      {/* Photo */}
+      <div className="flex justify-center px-6 py-3 flex-1">
+        {style.photoShape === "circular" ? (
+          <div className={`w-36 h-36 rounded-full overflow-hidden border-2 ${style.photoBorderColor || "border-gray-200"} flex-shrink-0 bg-gray-100`}>
+            {photoUrl ? (
+              <img src={photoUrl} alt={fullName} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">
+                Photo
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="w-36 h-44 overflow-hidden flex-shrink-0 bg-gray-100">
+            {photoUrl ? (
+              <img src={photoUrl} alt={fullName} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">
+                Photo
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Staff Details */}
+      <div className="text-center px-5 py-3 space-y-0.5">
+        <p className={`font-display font-bold text-base uppercase tracking-wide ${style.nameColor}`}>
+          {fullName || "Full Name"}
+        </p>
+        <p className={`text-xs font-medium uppercase ${style.roleColor}`}>
+          {role || "Role"}
+        </p>
+        <p className={`text-xs font-semibold uppercase ${style.departmentColor}`}>
+          {department || "Department"}
+        </p>
+      </div>
+
+      {/* Footer Bar */}
+      <div className={`mt-auto ${style.footerBg} px-4 py-2.5 flex items-center justify-between`}>
+        <span className={`text-[9px] font-medium italic ${style.footerText}`}>
+          Authorised Signature
         </span>
+        <div className="w-16 h-6 bg-white rounded-sm" />
+        <img
+          src={logoProten}
+          alt="Proten"
+          className="h-6 w-auto object-contain"
+          loading="lazy"
+        />
       </div>
-
-      {/* Content */}
-      <div className="absolute bottom-0 left-0 right-0 p-5 flex gap-4 items-end">
-        {/* Photo */}
-        <div className="w-16 h-20 rounded-lg overflow-hidden border-2 border-white/20 flex-shrink-0 bg-white/10">
-          {photoUrl ? (
-            <img src={photoUrl} alt={fullName} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-white/30 text-xs">
-              Photo
-            </div>
-          )}
-        </div>
-
-        {/* Details */}
-        <div className="flex-1 min-w-0 space-y-0.5">
-          <p className={`font-display font-bold text-sm truncate ${style.textColor}`}>
-            {fullName || "Full Name"}
-          </p>
-          <p className={`text-xs font-medium truncate ${style.labelColor}`}>
-            {role || "Role"}
-          </p>
-          <p className={`text-[10px] truncate ${style.labelColor} opacity-80`}>
-            {department || "Department"}
-          </p>
-          {id && (
-            <p className={`text-[8px] font-mono mt-1 ${style.labelColor} opacity-60`}>
-              ID: {id.slice(0, 8).toUpperCase()}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Decorative circle */}
-      <div className="absolute top-8 right-4 w-24 h-24 rounded-full border border-white/5" />
-      <div className="absolute top-12 right-8 w-16 h-16 rounded-full border border-white/5" />
     </div>
   );
 };

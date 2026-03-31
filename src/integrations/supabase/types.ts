@@ -24,6 +24,7 @@ export type Database = {
           id_card_url: string | null
           photo_url: string
           role: string
+          state: string | null
           updated_at: string
         }
         Insert: {
@@ -35,6 +36,7 @@ export type Database = {
           id_card_url?: string | null
           photo_url: string
           role: string
+          state?: string | null
           updated_at?: string
         }
         Update: {
@@ -46,6 +48,7 @@ export type Database = {
           id_card_url?: string | null
           photo_url?: string
           role?: string
+          state?: string | null
           updated_at?: string
         }
         Relationships: []

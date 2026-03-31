@@ -1,35 +1,41 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { toast } from "sonner";
-import { CreditCard, Shield, Zap } from "lucide-react";
+import { CreditCard, Shield, Zap, Download } from "lucide-react";
 import StaffForm, { StaffFormData } from "@/components/StaffForm";
-import IDCardPreview from "@/components/IDCardPreview";
+import IDCardPreview, { IDCardFront, IDCardBack } from "@/components/IDCardPreview";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
 const Index = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [generatedCard, setGeneratedCard] = useState<{
     fullName: string;
-    role: string;
-    department: string;
+    roleDepartment: string;
+    state: string;
     company: StaffFormData["company"];
     photoUrl: string;
     id: string;
   } | null>(null);
   const [livePreview, setLivePreview] = useState<StaffFormData>({
     fullName: "",
-    role: "",
-    department: "",
+    roleDepartment: "",
+    state: "",
     company: "SOTI",
     photo: null,
     photoPreview: null,
   });
+
+  const frontRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLDivElement>(null);
 
   const handleSubmit = async (data: StaffFormData) => {
     if (!data.photo) return;
 
     setIsSubmitting(true);
     try {
-      // Upload photo
       const fileExt = data.photo.name.split(".").pop();
       const fileName = `${crypto.randomUUID()}.${fileExt}`;
       const { error: uploadError } = await supabase.storage
@@ -42,15 +48,15 @@ const Index = () => {
         .from("staff-photos")
         .getPublicUrl(fileName);
 
-      // Insert staff entry
       const { data: entry, error: insertError } = await supabase
         .from("staff_entries")
         .insert({
           full_name: data.fullName,
-          role: data.role,
-          department: data.department,
+          role: data.roleDepartment.split("-")[0]?.trim() || data.roleDepartment,
+          department: data.roleDepartment.split("-").slice(1).join("-")?.trim() || "",
           company: data.company,
           photo_url: urlData.publicUrl,
+          state: data.state,
         })
         .select()
         .single();
@@ -59,8 +65,8 @@ const Index = () => {
 
       setGeneratedCard({
         fullName: entry.full_name,
-        role: entry.role,
-        department: entry.department,
+        roleDepartment: data.roleDepartment,
+        state: data.state || "",
         company: entry.company,
         photoUrl: entry.photo_url,
         id: entry.id,
@@ -72,6 +78,53 @@ const Index = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!frontRef.current || !backRef.current) return;
+
+    setIsDownloading(true);
+    try {
+      const frontCanvas = await html2canvas(frontRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+      const backCanvas = await html2canvas(backRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: [85.6, 130],
+      });
+
+      const frontImg = frontCanvas.toDataURL("image/png");
+      pdf.addImage(frontImg, "PNG", 0, 0, 85.6, 130);
+
+      pdf.addPage([85.6, 130], "portrait");
+      const backImg = backCanvas.toDataURL("image/png");
+      pdf.addImage(backImg, "PNG", 0, 0, 85.6, 130);
+
+      const safeName = (generatedCard?.fullName || "ID_Card").replace(/\s+/g, "_");
+      pdf.save(`${safeName}_ID_Card.pdf`);
+      toast.success("PDF downloaded!");
+    } catch (error: any) {
+      toast.error("Failed to download PDF: " + error.message);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const previewData = generatedCard || {
+    fullName: livePreview.fullName,
+    roleDepartment: livePreview.roleDepartment,
+    state: livePreview.state,
+    company: livePreview.company,
+    photoUrl: livePreview.photoPreview,
   };
 
   return (
@@ -111,7 +164,7 @@ const Index = () => {
       </div>
 
       {/* Main content */}
-      <main className="max-w-5xl mx-auto px-6 py-10">
+      <main className="max-w-6xl mx-auto px-6 py-10">
         <div className="grid lg:grid-cols-2 gap-10 items-start">
           {/* Form */}
           <div className="bg-card rounded-xl shadow-card p-6 md:p-8 animate-fade-in">
@@ -129,43 +182,70 @@ const Index = () => {
               <h2 className="font-display text-xl font-semibold mb-6">
                 {generatedCard ? "Generated ID Card" : "Live Preview"}
               </h2>
-              <div className="flex justify-center">
-                {generatedCard ? (
-                  <IDCardPreview
-                    fullName={generatedCard.fullName}
-                    role={generatedCard.role}
-                    department={generatedCard.department}
-                    company={generatedCard.company}
-                    photoUrl={generatedCard.photoUrl}
-                    id={generatedCard.id}
-                  />
-                ) : (
-                  <IDCardPreview
-                    fullName={livePreview.fullName}
-                    role={livePreview.role}
-                    department={livePreview.department}
-                    company={livePreview.company}
-                    photoUrl={livePreview.photoPreview}
-                  />
-                )}
+
+              {/* Front & Back side by side on larger screens */}
+              <div className="flex flex-col md:flex-row gap-6 justify-center items-center">
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground text-center font-semibold uppercase">Front</p>
+                  <div className="shadow-elevated rounded-lg overflow-hidden" style={{ width: 350 }}>
+                    <IDCardFront
+                      ref={frontRef}
+                      fullName={previewData.fullName}
+                      roleDepartment={previewData.roleDepartment}
+                      state={previewData.state}
+                      company={previewData.company}
+                      photoUrl={previewData.photoUrl}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground text-center font-semibold uppercase">Back</p>
+                  <div className="shadow-elevated rounded-lg overflow-hidden" style={{ width: 350 }}>
+                    <IDCardBack
+                      ref={backRef}
+                      company={previewData.company}
+                    />
+                  </div>
+                </div>
               </div>
+
+              {/* Download & Reset */}
               {generatedCard && (
-                <button
-                  onClick={() => {
-                    setGeneratedCard(null);
-                    setLivePreview({
-                      fullName: "",
-                      role: "",
-                      department: "",
-                      company: "SOTI",
-                      photo: null,
-                      photoPreview: null,
-                    });
-                  }}
-                  className="mt-4 w-full text-center text-sm text-accent hover:underline"
-                >
-                  Create another ID card
-                </button>
+                <div className="mt-6 space-y-3">
+                  <Button
+                    onClick={handleDownloadPDF}
+                    disabled={isDownloading}
+                    className="w-full h-12 text-base font-semibold bg-accent text-accent-foreground hover:bg-accent/90"
+                  >
+                    {isDownloading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
+                        Downloading…
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <Download className="w-5 h-5" />
+                        Download PDF (Front & Back)
+                      </span>
+                    )}
+                  </Button>
+                  <button
+                    onClick={() => {
+                      setGeneratedCard(null);
+                      setLivePreview({
+                        fullName: "",
+                        roleDepartment: "",
+                        state: "",
+                        company: "SOTI",
+                        photo: null,
+                        photoPreview: null,
+                      });
+                    }}
+                    className="w-full text-center text-sm text-accent hover:underline"
+                  >
+                    Create another ID card
+                  </button>
+                </div>
               )}
             </div>
           </div>

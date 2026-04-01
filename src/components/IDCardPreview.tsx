@@ -1,11 +1,12 @@
 import { forwardRef } from "react";
 import { CompanyTemplate } from "./StaffForm";
-import logoSoti from "@/assets/logo-soti.png";
 import logoOpay from "@/assets/logo-opay.png";
 import logoBlueridge from "@/assets/logo-blueridge.png";
 import logoProten from "@/assets/logo-proten.png";
 import sotiProtenBack from "@/assets/soti-proten-back.png";
-import signatureImg from "@/assets/signature.jpg";
+import templateSotiFront from "@/assets/template-soti-front.jpg";
+import templateOpayFront from "@/assets/template-opay-front.jpg";
+import templateBlueridgeFront from "@/assets/template-blueridge-front.jpg";
 
 interface IDCardPreviewProps {
   fullName: string;

@@ -4,6 +4,7 @@ import logoSoti from "@/assets/logo-soti.png";
 import logoOpay from "@/assets/logo-opay.png";
 import logoBlueridge from "@/assets/logo-blueridge.png";
 import logoProten from "@/assets/logo-proten.png";
+import sotiProtenBack from "@/assets/soti-proten-back.png";
 import signatureImg from "@/assets/signature.jpg";
 
 interface IDCardPreviewProps {
@@ -16,55 +17,14 @@ interface IDCardPreviewProps {
   side?: "front" | "back";
 }
 
-const templateStyles: Record<CompanyTemplate, {
-  logo: string;
-  nameColor: string;
-  stateColor: string;
-  roleColor: string;
-  footerBg: string;
-  authSignatureColor: string;
-  photoShape: "rectangular" | "circular";
-  photoBorderColor?: string;
-}> = {
-  SOTI: {
-    logo: logoSoti,
-    nameColor: "#1a8c7a",
-    stateColor: "#1a8c7a",
-    roleColor: "#2d3748",
-    footerBg: "#1e2a3a",
-    authSignatureColor: "#2cc4ad",
-    photoShape: "rectangular",
-  },
-  OPAY: {
-    logo: logoOpay,
-    nameColor: "#1a8c7a",
-    stateColor: "#1a8c7a",
-    roleColor: "#2d3748",
-    footerBg: "#1e2a3a",
-    authSignatureColor: "#2cc4ad",
-    photoShape: "rectangular",
-  },
-  "Blue Ridge": {
-    logo: logoBlueridge,
-    nameColor: "#0033cc",
-    stateColor: "#1a1a1a",
-    roleColor: "#4a5568",
-    footerBg: "#0033cc",
-    authSignatureColor: "#ffffff",
-    photoShape: "circular",
-    photoBorderColor: "#a8c8e8",
-  },
-};
-
-const backLogos: Record<CompanyTemplate, string> = {
-  SOTI: logoSoti,
-  OPAY: logoOpay,
-  "Blue Ridge": logoBlueridge,
-};
+/* ───── FRONT CARD ───── */
 
 const IDCardFront = forwardRef<HTMLDivElement, IDCardPreviewProps>(
   ({ fullName, roleDepartment, state, company, photoUrl }, ref) => {
-    const style = templateStyles[company];
+    // All three templates use OPay logo at the top
+    const topLogo = logoOpay;
+
+    const isBlueRidge = company === "Blue Ridge";
 
     return (
       <div
@@ -72,25 +32,21 @@ const IDCardFront = forwardRef<HTMLDivElement, IDCardPreviewProps>(
         className="relative bg-white overflow-hidden flex flex-col"
         style={{ width: 350, height: 530, fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}
       >
-        {/* Company Logo */}
+        {/* Top Logo – OPay for all */}
         <div className="flex justify-center pt-5 pb-2 px-6">
-          <img
-            src={style.logo}
-            alt={company}
-            className="h-16 w-auto object-contain"
-            style={{ imageRendering: "auto" }}
-          />
+          {isBlueRidge ? (
+            <img src={logoBlueridge} alt="Blue Ridge" className="h-16 w-auto object-contain" />
+          ) : (
+            <img src={topLogo} alt="OPay" className="h-16 w-auto object-contain" />
+          )}
         </div>
 
         {/* Photo */}
         <div className="flex justify-center px-6 py-2 flex-1 items-center">
-          {style.photoShape === "circular" ? (
+          {isBlueRidge ? (
             <div
               className="rounded-full overflow-hidden flex-shrink-0 bg-gray-100"
-              style={{
-                width: 180, height: 180,
-                border: `3px solid ${style.photoBorderColor || "#ccc"}`,
-              }}
+              style={{ width: 180, height: 180, border: "3px solid #a8c8e8" }}
             >
               {photoUrl ? (
                 <img src={photoUrl} alt={fullName} className="w-full h-full object-cover" />
@@ -99,7 +55,10 @@ const IDCardFront = forwardRef<HTMLDivElement, IDCardPreviewProps>(
               )}
             </div>
           ) : (
-            <div className="overflow-hidden flex-shrink-0 bg-gray-100" style={{ width: 165, height: 195 }}>
+            <div
+              className="overflow-hidden flex-shrink-0 bg-gray-100"
+              style={{ width: 165, height: 195, border: "1px solid #c0dde8" }}
+            >
               {photoUrl ? (
                 <img src={photoUrl} alt={fullName} className="w-full h-full object-cover" />
               ) : (
@@ -112,20 +71,20 @@ const IDCardFront = forwardRef<HTMLDivElement, IDCardPreviewProps>(
         {/* Staff Details */}
         <div className="text-center px-5 py-2 space-y-0.5">
           <p
-            className="font-bold text-lg uppercase tracking-wide"
-            style={{ color: style.nameColor, fontWeight: 800 }}
+            className="text-lg uppercase tracking-wide"
+            style={{ color: isBlueRidge ? "#0033cc" : "#1a8c7a", fontWeight: 800 }}
           >
             {fullName || "FULL NAME"}
           </p>
           <p
-            className="text-sm font-medium uppercase tracking-wide"
-            style={{ color: style.roleColor }}
+            className="text-sm uppercase tracking-wide"
+            style={{ color: isBlueRidge ? "#4a5568" : "#2d3748", fontWeight: 600 }}
           >
             {roleDepartment || "ROLE - DEPARTMENT"}
           </p>
           <p
-            className="text-base font-bold uppercase tracking-wide"
-            style={{ color: style.stateColor, fontStyle: company === "Blue Ridge" ? "normal" : "normal", fontWeight: 700 }}
+            className="text-base uppercase tracking-wide"
+            style={{ color: isBlueRidge ? "#1a1a1a" : "#1a8c7a", fontWeight: 700 }}
           >
             {state || "STATE"}
           </p>
@@ -134,56 +93,90 @@ const IDCardFront = forwardRef<HTMLDivElement, IDCardPreviewProps>(
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Footer Bar - matches templates exactly:
-            Left: "Authorised Signature" text
-            Center: White box with signature image
-            Right: PROTEN logo */}
-        <div
-          className="px-3 py-2 flex items-center justify-between"
-          style={{ backgroundColor: style.footerBg, minHeight: 48 }}
-        >
-          <span
-            className="text-[9px] font-medium italic leading-tight"
-            style={{ color: style.authSignatureColor, maxWidth: 65 }}
-          >
-            Authorised Signature
-          </span>
-          <div className="bg-white rounded-sm flex items-center justify-center overflow-hidden" style={{ width: 80, height: 36 }}>
-            <img
-              src={signatureImg}
-              alt="Signature"
-              className="w-full h-full object-contain"
-              style={{ padding: 2 }}
-            />
+        {/* Footer – company-specific */}
+        {company === "SOTI" ? (
+          /* SOTI: white bg, SOTI logo left, teal sig box center, PROTEN right */
+          <div className="px-3 py-2 flex items-center justify-between" style={{ minHeight: 48 }}>
+            <img src={logoSoti} alt="SOTI" className="h-8 w-auto object-contain" />
+            <div
+              className="rounded-sm flex items-center justify-center overflow-hidden"
+              style={{ width: 100, height: 40, backgroundColor: "#2cc4ad" }}
+            >
+              <div className="bg-white rounded-sm overflow-hidden flex items-center justify-center" style={{ width: 80, height: 32 }}>
+                <img src={signatureImg} alt="Signature" className="w-full h-full object-contain" style={{ padding: 2 }} />
+              </div>
+            </div>
+            <img src={logoProten} alt="Proten" className="h-7 w-auto object-contain" />
           </div>
-          <img
-            src={logoProten}
-            alt="Proten"
-            className="h-7 w-auto object-contain"
-            loading="lazy"
-          />
-        </div>
+        ) : company === "OPAY" ? (
+          /* OPAY: teal bg, "Authorised Signature" left, white sig box center, PROTEN right */
+          <div
+            className="px-3 py-2 flex items-center justify-between"
+            style={{ backgroundColor: "#2cc4ad", minHeight: 48 }}
+          >
+            <span
+              className="text-[9px] font-semibold italic leading-tight text-white"
+              style={{ maxWidth: 65 }}
+            >
+              Authorised Signature
+            </span>
+            <div className="bg-white rounded-sm flex items-center justify-center overflow-hidden" style={{ width: 80, height: 36 }}>
+              <img src={signatureImg} alt="Signature" className="w-full h-full object-contain" style={{ padding: 2 }} />
+            </div>
+            <img src={logoProten} alt="Proten" className="h-7 w-auto object-contain" />
+          </div>
+        ) : (
+          /* Blue Ridge: blue bg, "Authorised Signature" left, white sig box center, PROTEN right */
+          <div
+            className="px-3 py-2 flex items-center justify-between"
+            style={{ backgroundColor: "#0033cc", minHeight: 48 }}
+          >
+            <span
+              className="text-[9px] font-semibold italic leading-tight text-white"
+              style={{ maxWidth: 65 }}
+            >
+              Authorised Signature
+            </span>
+            <div className="bg-white rounded-sm flex items-center justify-center overflow-hidden" style={{ width: 80, height: 36 }}>
+              <img src={signatureImg} alt="Signature" className="w-full h-full object-contain" style={{ padding: 2 }} />
+            </div>
+            <img src={logoProten} alt="Proten" className="h-7 w-auto object-contain" />
+          </div>
+        )}
       </div>
     );
   }
 );
 IDCardFront.displayName = "IDCardFront";
 
+/* ───── BACK CARD ───── */
+
 const IDCardBack = forwardRef<HTMLDivElement, { company: CompanyTemplate }>(
   ({ company }, ref) => {
-    const companyLogo = backLogos[company];
-
     return (
       <div
         ref={ref}
         className="relative bg-white overflow-hidden flex flex-col"
         style={{ width: 350, height: 530, fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}
       >
-        {/* Logos */}
+        {/* Top logos */}
         <div className="flex items-center justify-center gap-4 pt-6 pb-4 px-8">
-          <img src={companyLogo} alt={company} className="h-12 w-auto object-contain" />
-          <div className="w-px h-10 bg-gray-300" />
-          <img src={logoProten} alt="Proten" className="h-10 w-auto object-contain" />
+          {company === "SOTI" ? (
+            /* SOTI back uses the combined SOTI | PROTEN image */
+            <img src={sotiProtenBack} alt="SOTI | Proten" className="h-12 w-auto object-contain" />
+          ) : company === "OPAY" ? (
+            <>
+              <img src={logoOpay} alt="OPay" className="h-12 w-auto object-contain" />
+              <div className="w-px h-10 bg-gray-300" />
+              <img src={logoProten} alt="Proten" className="h-10 w-auto object-contain" />
+            </>
+          ) : (
+            <>
+              <img src={logoBlueridge} alt="Blue Ridge" className="h-12 w-auto object-contain" />
+              <div className="w-px h-10 bg-gray-300" />
+              <img src={logoProten} alt="Proten" className="h-10 w-auto object-contain" />
+            </>
+          )}
         </div>
 
         {/* Body text */}
@@ -209,6 +202,8 @@ const IDCardBack = forwardRef<HTMLDivElement, { company: CompanyTemplate }>(
   }
 );
 IDCardBack.displayName = "IDCardBack";
+
+/* ───── WRAPPER ───── */
 
 const IDCardPreview = forwardRef<HTMLDivElement, IDCardPreviewProps>(
   (props, ref) => {

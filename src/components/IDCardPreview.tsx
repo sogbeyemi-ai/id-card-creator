@@ -96,51 +96,53 @@ const IDCardFront = forwardRef<HTMLDivElement, IDCardPreviewProps>(
         {/* Footer – company-specific */}
         {company === "SOTI" ? (
           /* SOTI: white bg, SOTI logo left, teal sig box center, PROTEN right */
-          <div className="px-3 py-2 flex items-center justify-between" style={{ minHeight: 48 }}>
-            <img src={logoSoti} alt="SOTI" className="h-8 w-auto object-contain" />
+          <div className="px-3 py-2 flex items-center justify-between" style={{ minHeight: 56 }}>
+            <img src={logoSoti} alt="SOTI" className="h-10 w-auto object-contain" />
             <div
               className="rounded-sm flex items-center justify-center overflow-hidden"
-              style={{ width: 100, height: 40, backgroundColor: "#2cc4ad" }}
+              style={{ width: 120, height: 48, backgroundColor: "#2cc4ad" }}
             >
-              <div className="bg-white rounded-sm overflow-hidden flex items-center justify-center" style={{ width: 80, height: 32 }}>
+              <div className="bg-white rounded-sm overflow-hidden flex items-center justify-center" style={{ width: 100, height: 40 }}>
                 <img src={signatureImg} alt="Signature" className="w-full h-full object-contain" style={{ padding: 2 }} />
               </div>
             </div>
-            <img src={logoProten} alt="Proten" className="h-7 w-auto object-contain" />
+            <img src={logoProten} alt="Proten" className="h-9 w-auto object-contain" />
           </div>
         ) : company === "OPAY" ? (
-          /* OPAY: teal bg, "Authorised Signature" left, white sig box center, PROTEN right */
-          <div
-            className="px-3 py-2 flex items-center justify-between"
-            style={{ backgroundColor: "#2cc4ad", minHeight: 48 }}
-          >
-            <span
-              className="text-[9px] font-semibold italic leading-tight text-white"
-              style={{ maxWidth: 65 }}
+          /* OPAY: teal bar left+center, PROTEN on white right */
+          <div className="flex items-stretch" style={{ minHeight: 56 }}>
+            <div
+              className="flex-1 flex items-center justify-between px-4"
+              style={{ backgroundColor: "#2cc4ad" }}
             >
-              Authorised Signature
-            </span>
-            <div className="bg-white rounded-sm flex items-center justify-center overflow-hidden" style={{ width: 80, height: 36 }}>
-              <img src={signatureImg} alt="Signature" className="w-full h-full object-contain" style={{ padding: 2 }} />
+              <span className="text-sm font-bold text-white" style={{ maxWidth: 100 }}>
+                Authorised Signature
+              </span>
+              <div className="bg-white rounded-sm flex items-center justify-center overflow-hidden" style={{ width: 100, height: 44 }}>
+                <img src={signatureImg} alt="Signature" className="w-full h-full object-contain" style={{ padding: 2 }} />
+              </div>
             </div>
-            <img src={logoProten} alt="Proten" className="h-7 w-auto object-contain" />
+            <div className="flex items-center justify-center px-3 bg-white">
+              <img src={logoProten} alt="Proten" className="h-9 w-auto object-contain" />
+            </div>
           </div>
         ) : (
-          /* Blue Ridge: blue bg, "Authorised Signature" left, white sig box center, PROTEN right */
-          <div
-            className="px-3 py-2 flex items-center justify-between"
-            style={{ backgroundColor: "#0033cc", minHeight: 48 }}
-          >
-            <span
-              className="text-[9px] font-semibold italic leading-tight text-white"
-              style={{ maxWidth: 65 }}
+          /* Blue Ridge: blue bar left+center, PROTEN on white right */
+          <div className="flex items-stretch" style={{ minHeight: 56 }}>
+            <div
+              className="flex-1 flex items-center justify-between px-4"
+              style={{ backgroundColor: "#0000ff" }}
             >
-              Authorised Signature
-            </span>
-            <div className="bg-white rounded-sm flex items-center justify-center overflow-hidden" style={{ width: 80, height: 36 }}>
-              <img src={signatureImg} alt="Signature" className="w-full h-full object-contain" style={{ padding: 2 }} />
+              <span className="text-sm font-bold text-white" style={{ maxWidth: 100 }}>
+                Authorised Signature
+              </span>
+              <div className="bg-white rounded-sm flex items-center justify-center overflow-hidden" style={{ width: 100, height: 44 }}>
+                <img src={signatureImg} alt="Signature" className="w-full h-full object-contain" style={{ padding: 2 }} />
+              </div>
             </div>
-            <img src={logoProten} alt="Proten" className="h-7 w-auto object-contain" />
+            <div className="flex items-center justify-center px-3 bg-white">
+              <img src={logoProten} alt="Proten" className="h-9 w-auto object-contain" />
+            </div>
           </div>
         )}
       </div>

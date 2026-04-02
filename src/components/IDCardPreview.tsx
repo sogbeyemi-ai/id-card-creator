@@ -123,21 +123,20 @@ const IDCardBack = forwardRef<HTMLDivElement, { company: CompanyTemplate }>(
         style={{ width: 350, height: 530, fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}
       >
         {/* Top logos */}
-        <div className="flex items-center justify-center gap-4 pt-6 pb-4 px-8">
+        <div className="flex items-center justify-center gap-4 pt-6 pb-4 px-8" style={{ height: 70 }}>
           {company === "SOTI" ? (
-            /* SOTI back uses the combined SOTI | PROTEN image */
-            <img src={sotiProtenBack} alt="SOTI | Proten" className="h-12 w-auto object-contain" />
+            <img src={sotiProtenBack} alt="SOTI | Proten" style={{ height: 40, width: "auto" }} className="object-contain" />
           ) : company === "OPAY" ? (
             <>
-              <img src={logoOpay} alt="OPay" className="h-12 w-auto object-contain" />
-              <div className="w-px h-10 bg-gray-300" />
-              <img src={logoProten} alt="Proten" className="h-12 w-auto object-contain" />
+              <img src={logoOpay} alt="OPay" style={{ height: 40, width: "auto" }} className="object-contain" />
+              <div className="w-px bg-gray-300" style={{ height: 36 }} />
+              <img src={logoProten} alt="Proten" style={{ height: 40, width: "auto" }} className="object-contain" />
             </>
           ) : (
             <>
-              <img src={logoBlueridge} alt="Blue Ridge" className="h-12 w-auto object-contain" />
-              <div className="w-px h-10 bg-gray-300" />
-              <img src={logoProten} alt="Proten" className="h-12 w-auto object-contain" />
+              <img src={logoBlueridge} alt="Blue Ridge" style={{ height: 55 }} className="object-contain" />
+              <div className="w-px bg-gray-300" style={{ height: 40 }} />
+              <img src={logoProten} alt="Proten" style={{ height: 55, width: "auto" }} className="object-contain" />
             </>
           )}
         </div>

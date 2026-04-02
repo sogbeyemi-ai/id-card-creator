@@ -131,13 +131,13 @@ const IDCardBack = forwardRef<HTMLDivElement, { company: CompanyTemplate }>(
             <>
               <img src={logoOpay} alt="OPay" className="h-12 w-auto object-contain" />
               <div className="w-px h-10 bg-gray-300" />
-              <img src={logoProten} alt="Proten" className="h-10 w-auto object-contain" />
+              <img src={logoProten} alt="Proten" className="h-12 w-auto object-contain" />
             </>
           ) : (
             <>
               <img src={logoBlueridge} alt="Blue Ridge" className="h-12 w-auto object-contain" />
               <div className="w-px h-10 bg-gray-300" />
-              <img src={logoProten} alt="Proten" className="h-10 w-auto object-contain" />
+              <img src={logoProten} alt="Proten" className="h-12 w-auto object-contain" />
             </>
           )}
         </div>

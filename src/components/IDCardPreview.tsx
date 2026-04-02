@@ -129,14 +129,14 @@ const IDCardBack = forwardRef<HTMLDivElement, { company: CompanyTemplate }>(
           ) : company === "OPAY" ? (
             <>
               <img src={logoOpay} alt="OPay" style={{ height: 40, width: "auto" }} className="object-contain" />
-              <div className="w-px bg-gray-300" style={{ height: 36 }} />
-              <img src={logoProten} alt="Proten" style={{ height: 40, width: "auto" }} className="object-contain" />
+              <div className="w-px bg-gray-300" style={{ height: 30 }} />
+              <img src={logoProten} alt="Proten" style={{ height: 28, width: "auto" }} className="object-contain" />
             </>
           ) : (
             <>
-              <img src={logoBlueridge} alt="Blue Ridge" style={{ height: 55 }} className="object-contain" />
-              <div className="w-px bg-gray-300" style={{ height: 40 }} />
-              <img src={logoProten} alt="Proten" style={{ height: 55, width: "auto" }} className="object-contain" />
+              <img src={logoBlueridge} alt="Blue Ridge" style={{ height: 40 }} className="object-contain" />
+              <div className="w-px bg-gray-300" style={{ height: 30 }} />
+              <img src={logoProten} alt="Proten" style={{ height: 28, width: "auto" }} className="object-contain" />
             </>
           )}
         </div>

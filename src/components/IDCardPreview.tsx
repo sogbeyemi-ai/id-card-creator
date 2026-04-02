@@ -134,9 +134,9 @@ const IDCardBack = forwardRef<HTMLDivElement, { company: CompanyTemplate }>(
             </>
           ) : (
             <>
-              <img src={logoBlueridge} alt="Blue Ridge" style={{ height: 40, width: 100 }} className="object-contain" />
+              <img src={logoBlueridge} alt="Blue Ridge" style={{ height: 50, width: "auto" }} className="object-contain" />
               <div className="w-px bg-gray-300" style={{ height: 36 }} />
-              <img src={logoProten} alt="Proten" style={{ height: 40, width: "auto" }} className="object-contain" />
+              <img src={logoProten} alt="Proten" style={{ height: 50, width: "auto" }} className="object-contain" />
             </>
           )}
         </div>

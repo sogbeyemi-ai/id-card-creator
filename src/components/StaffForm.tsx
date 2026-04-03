@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, User, Briefcase, Image, MapPin } from "lucide-react";
+import { Upload, User, Briefcase, Image, MapPin, Camera, X } from "lucide-react";
+import Webcam from "react-webcam";
 
 export type CompanyTemplate = "SOTI" | "OPAY" | "Blue Ridge";
 
@@ -29,11 +30,12 @@ export interface StaffFormData {
 interface StaffFormProps {
   onSubmit: (data: StaffFormData) => void;
   isSubmitting: boolean;
-  onChange?: (data: StaffFormData) => void;
+  verificationError?: string | null;
 }
 
-const StaffForm = ({ onSubmit, isSubmitting, onChange }: StaffFormProps) => {
+const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const webcamRef = useRef<Webcam>(null);
   const [formData, setFormData] = useState<StaffFormData>({
     fullName: "",
     roleDepartment: "",
@@ -43,10 +45,7 @@ const StaffForm = ({ onSubmit, isSubmitting, onChange }: StaffFormProps) => {
     photoPreview: null,
   });
   const [stateError, setStateError] = useState<string | null>(null);
-
-  useEffect(() => {
-    onChange?.(formData);
-  }, [formData, onChange]);
+  const [showCamera, setShowCamera] = useState(false);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -62,6 +61,24 @@ const StaffForm = ({ onSubmit, isSubmitting, onChange }: StaffFormProps) => {
       reader.readAsDataURL(file);
     }
   };
+
+  const handleCameraCapture = useCallback(() => {
+    const imageSrc = webcamRef.current?.getScreenshot();
+    if (imageSrc) {
+      // Convert base64 to File
+      fetch(imageSrc)
+        .then((res) => res.blob())
+        .then((blob) => {
+          const file = new File([blob], "camera-photo.jpg", { type: "image/jpeg" });
+          setFormData((prev) => ({
+            ...prev,
+            photo: file,
+            photoPreview: imageSrc,
+          }));
+          setShowCamera(false);
+        });
+    }
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,29 +96,61 @@ const StaffForm = ({ onSubmit, isSubmitting, onChange }: StaffFormProps) => {
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Photo upload */}
       <div className="flex flex-col items-center gap-4">
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="relative w-32 h-32 rounded-full border-2 border-dashed border-muted-foreground/30 hover:border-accent transition-colors flex items-center justify-center overflow-hidden group"
-        >
-          {formData.photoPreview ? (
-            <img src={formData.photoPreview} alt="Preview" className="w-full h-full object-cover" />
-          ) : (
-            <div className="flex flex-col items-center gap-1 text-muted-foreground group-hover:text-accent transition-colors">
-              <Image className="w-8 h-8" />
-              <span className="text-xs">Upload Photo</span>
+        {showCamera ? (
+          <div className="space-y-3 w-full">
+            <Webcam
+              ref={webcamRef}
+              audio={false}
+              screenshotFormat="image/jpeg"
+              videoConstraints={{ facingMode: "user", width: 320, height: 320 }}
+              className="rounded-lg mx-auto"
+              style={{ width: 200, height: 200 }}
+            />
+            <div className="flex gap-2 justify-center">
+              <Button type="button" size="sm" onClick={handleCameraCapture} className="bg-accent text-accent-foreground">
+                <Camera className="w-4 h-4 mr-1" /> Capture
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setShowCamera(false)}>
+                <X className="w-4 h-4 mr-1" /> Cancel
+              </Button>
             </div>
-          )}
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handlePhotoChange}
-          className="hidden"
-        />
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="relative w-32 h-32 rounded-full border-2 border-dashed border-muted-foreground/30 hover:border-accent transition-colors flex items-center justify-center overflow-hidden group"
+            >
+              {formData.photoPreview ? (
+                <img src={formData.photoPreview} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <div className="flex flex-col items-center gap-1 text-muted-foreground group-hover:text-accent transition-colors">
+                  <Image className="w-8 h-8" />
+                  <span className="text-xs">Upload Photo</span>
+                </div>
+              )}
+            </button>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="w-3 h-3 mr-1" /> Upload
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setShowCamera(true)}>
+                <Camera className="w-3 h-3 mr-1" /> Camera
+              </Button>
+            </div>
+          </>
+        )}
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
         <p className="text-xs text-muted-foreground">Passport-style photo recommended</p>
       </div>
+
+      {/* Verification error */}
+      {verificationError && (
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 text-sm text-destructive font-medium text-center">
+          {verificationError}
+        </div>
+      )}
 
       {/* Form fields */}
       <div className="space-y-4">
@@ -114,9 +163,7 @@ const StaffForm = ({ onSubmit, isSubmitting, onChange }: StaffFormProps) => {
             id="fullName"
             placeholder="Enter full name"
             value={formData.fullName}
-            onChange={(e) =>
-              setFormData((prev) => ({ ...prev, fullName: e.target.value.toUpperCase() }))
-            }
+            onChange={(e) => setFormData((prev) => ({ ...prev, fullName: e.target.value.toUpperCase() }))}
             required
             className="uppercase"
           />
@@ -131,9 +178,7 @@ const StaffForm = ({ onSubmit, isSubmitting, onChange }: StaffFormProps) => {
             id="roleDepartment"
             placeholder="e.g. BD-CARDLESS PAYMENT BUSINESS"
             value={formData.roleDepartment}
-            onChange={(e) =>
-              setFormData((prev) => ({ ...prev, roleDepartment: e.target.value.toUpperCase() }))
-            }
+            onChange={(e) => setFormData((prev) => ({ ...prev, roleDepartment: e.target.value.toUpperCase() }))}
             required
             className="uppercase"
           />
@@ -147,18 +192,12 @@ const StaffForm = ({ onSubmit, isSubmitting, onChange }: StaffFormProps) => {
           </Label>
           <Select
             value={formData.company}
-            onValueChange={(value: CompanyTemplate) =>
-              setFormData((prev) => ({ ...prev, company: value }))
-            }
+            onValueChange={(value: CompanyTemplate) => setFormData((prev) => ({ ...prev, company: value }))}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select company" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
             <SelectContent>
               {COMPANIES.map((company) => (
-                <SelectItem key={company} value={company}>
-                  {company.toUpperCase()}
-                </SelectItem>
+                <SelectItem key={company} value={company}>{company.toUpperCase()}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -176,38 +215,26 @@ const StaffForm = ({ onSubmit, isSubmitting, onChange }: StaffFormProps) => {
               setStateError(null);
             }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select state" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
             <SelectContent>
               {NIGERIAN_STATES.map((state) => (
-                <SelectItem key={state} value={state}>
-                  {state}
-                </SelectItem>
+                <SelectItem key={state} value={state}>{state}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {stateError && (
-            <p className="text-sm text-destructive font-medium">{stateError}</p>
-          )}
+          {stateError && <p className="text-sm text-destructive font-medium">{stateError}</p>}
         </div>
       </div>
 
       <Button
         type="submit"
-        disabled={
-          isSubmitting ||
-          !formData.photo ||
-          !formData.fullName ||
-          !formData.roleDepartment ||
-          !formData.state
-        }
+        disabled={isSubmitting || !formData.photo || !formData.fullName || !formData.roleDepartment || !formData.state}
         className="w-full h-12 text-base font-display font-semibold bg-accent text-accent-foreground hover:bg-accent/90 transition-all"
       >
         {isSubmitting ? (
           <span className="flex items-center gap-2">
             <span className="w-4 h-4 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
-            Generating ID Card...
+            Verifying & Generating…
           </span>
         ) : (
           "Generate ID Card"

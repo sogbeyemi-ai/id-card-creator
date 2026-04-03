@@ -5,6 +5,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import AdminLogin from "./pages/AdminLogin.tsx";
+import AdminLayout from "./pages/AdminLayout.tsx";
+import AdminDashboard from "./pages/AdminDashboard.tsx";
+import AdminUpload from "./pages/AdminUpload.tsx";
+import AdminEntries from "./pages/AdminEntries.tsx";
+import AdminUsers from "./pages/AdminUsers.tsx";
 
 const queryClient = new QueryClient();
 
@@ -16,7 +22,13 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/admin" element={<AdminLogin />} />
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="upload" element={<AdminUpload />} />
+            <Route path="entries" element={<AdminEntries />} />
+            <Route path="users" element={<AdminUsers />} />
+          </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { toast } from "sonner";
-import { CreditCard, Shield, Zap, Download } from "lucide-react";
+import { Shield, Zap, Download } from "lucide-react";
 import StaffForm, { StaffFormData } from "@/components/StaffForm";
 import { IDCardFront, IDCardBack } from "@/components/IDCardPreview";
 import { Button } from "@/components/ui/button";
@@ -32,9 +32,8 @@ const Index = () => {
     setVerificationError(null);
 
     try {
-      // Step 1: Verify against verified_staff table
       const rolePart = data.roleDepartment.split("-")[0]?.trim().toUpperCase();
-      
+
       const { data: verified, error: verifyError } = await supabase
         .from("verified_staff")
         .select("id")
@@ -50,7 +49,6 @@ const Index = () => {
         return;
       }
 
-      // Step 2: Upload photo
       const fileExt = data.photo.name.split(".").pop();
       const fileName = `${crypto.randomUUID()}.${fileExt}`;
       const { error: uploadError } = await supabase.storage
@@ -62,7 +60,6 @@ const Index = () => {
         .from("staff-photos")
         .getPublicUrl(fileName);
 
-      // Step 3: Insert staff entry
       const { data: entry, error: insertError } = await supabase
         .from("staff_entries")
         .insert({
@@ -99,13 +96,11 @@ const Index = () => {
   const handleDownloadPDF = async () => {
     if (!frontRef.current || !backRef.current || !generatedCard) return;
 
-    // Check download lock
     if (generatedCard.downloadLocked) {
       toast.error("Download already completed. Contact admin.");
       return;
     }
 
-    // Check from DB
     const { data: entry } = await supabase
       .from("staff_entries")
       .select("download_count, download_locked")
@@ -131,7 +126,6 @@ const Index = () => {
       const safeName = generatedCard.fullName.replace(/\s+/g, "_");
       pdf.save(`${safeName}_ID_Card.pdf`);
 
-      // Log download and lock
       await supabase.from("download_logs").insert({ staff_entry_id: generatedCard.id });
       await supabase
         .from("staff_entries")
@@ -165,28 +159,9 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Features bar */}
-      <div className="border-b border-border bg-card">
-        <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-center gap-8 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <CreditCard className="w-3.5 h-3.5 text-accent" />
-            3 Templates
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Shield className="w-3.5 h-3.5 text-accent" />
-            Verified Staff Only
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5 text-accent" />
-            Instant Generation
-          </span>
-        </div>
-      </div>
-
       {/* Main content */}
       <main className="max-w-6xl mx-auto px-6 py-10">
         {!generatedCard ? (
-          /* Form only - no live preview */
           <div className="max-w-lg mx-auto">
             <div className="bg-card rounded-xl shadow-card p-6 md:p-8 animate-fade-in">
               <h2 className="font-display text-xl font-semibold mb-6">Staff Information</h2>
@@ -198,7 +173,6 @@ const Index = () => {
             </div>
           </div>
         ) : (
-          /* Generated card view */
           <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
             <div className="bg-card rounded-xl shadow-card p-6 md:p-8">
               <h2 className="font-display text-xl font-semibold mb-6 text-center">Your ID Card</h2>

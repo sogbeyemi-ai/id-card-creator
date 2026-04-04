@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { UserPlus, Shield } from "lucide-react";
+import { UserPlus, Shield, Trash2 } from "lucide-react";
 
 interface AdminUser {
   user_id: string;
@@ -20,15 +20,18 @@ const AdminUsers = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [creating, setCreating] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const fetchAdmins = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    setCurrentUserId(session?.user?.id || null);
+
     const { data } = await supabase
       .from("user_roles")
       .select("user_id, role, created_at")
       .eq("role", "admin");
 
     if (data) {
-      // Get profiles for emails
       const userIds = data.map((d) => d.user_id);
       const { data: profiles } = await supabase
         .from("profiles")
@@ -47,27 +50,33 @@ const AdminUsers = () => {
   const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
     setCreating(true);
 
     try {
-      // Sign up the new admin
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: window.location.origin },
-      });
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
 
-      if (signUpError) throw signUpError;
-      if (!signUpData.user) throw new Error("Failed to create user");
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/create-admin`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        }
+      );
 
-      // Assign admin role
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({ user_id: signUpData.user.id, role: "admin" as any });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to create admin");
 
-      if (roleError) throw roleError;
-
-      toast.success("Admin user created! They will need to verify their email.");
+      toast.success("Admin user created successfully!");
       setEmail("");
       setPassword("");
       fetchAdmins();
@@ -75,6 +84,26 @@ const AdminUsers = () => {
       toast.error(error.message);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleRemoveAdmin = async (userId: string) => {
+    if (userId === currentUserId) {
+      toast.error("You cannot remove yourself");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("user_roles")
+      .delete()
+      .eq("user_id", userId)
+      .eq("role", "admin");
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Admin removed");
+      fetchAdmins();
     }
   };
 
@@ -104,7 +133,7 @@ const AdminUsers = () => {
             <Input
               id="admin-password"
               type="password"
-              placeholder="Strong password"
+              placeholder="Strong password (8+ characters)"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -112,7 +141,12 @@ const AdminUsers = () => {
             />
           </div>
           <Button type="submit" disabled={creating} className="bg-accent text-accent-foreground hover:bg-accent/90">
-            {creating ? "Creating…" : "Create Admin"}
+            {creating ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
+                Creating…
+              </span>
+            ) : "Create Admin"}
           </Button>
         </form>
       </Card>
@@ -127,6 +161,7 @@ const AdminUsers = () => {
             <TableRow>
               <TableHead>Email</TableHead>
               <TableHead>Added</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -134,11 +169,25 @@ const AdminUsers = () => {
               <TableRow key={admin.user_id}>
                 <TableCell>{admin.email}</TableCell>
                 <TableCell>{new Date(admin.created_at).toLocaleDateString()}</TableCell>
+                <TableCell>
+                  {admin.user_id !== currentUserId ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveAdmin(admin.user_id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">You</span>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {admins.length === 0 && (
               <TableRow>
-                <TableCell colSpan={2} className="text-center text-muted-foreground">
+                <TableCell colSpan={3} className="text-center text-muted-foreground">
                   No admin users yet
                 </TableCell>
               </TableRow>

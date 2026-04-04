@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, User, Briefcase, Image, MapPin, Camera, X } from "lucide-react";
+import { Upload, User, Briefcase, Image, MapPin, Camera, X, SwitchCamera } from "lucide-react";
 import Webcam from "react-webcam";
 
 export type CompanyTemplate = "SOTI" | "OPAY" | "Blue Ridge";
@@ -46,10 +46,17 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
   });
   const [stateError, setStateError] = useState<string | null>(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setFormError("Photo must be less than 5MB");
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData((prev) => ({
@@ -57,15 +64,15 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
           photo: file,
           photoPreview: reader.result as string,
         }));
+        setFormError(null);
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleCameraCapture = useCallback(() => {
-    const imageSrc = webcamRef.current?.getScreenshot();
+    const imageSrc = webcamRef.current?.getScreenshot({ width: 640, height: 640 });
     if (imageSrc) {
-      // Convert base64 to File
       fetch(imageSrc)
         .then((res) => res.blob())
         .then((blob) => {
@@ -76,18 +83,41 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
             photoPreview: imageSrc,
           }));
           setShowCamera(false);
+          setCameraError(null);
+          setFormError(null);
         });
     }
   }, []);
 
+  const toggleCamera = () => {
+    setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.photo) return;
+    setFormError(null);
 
-    if (!formData.state || !NIGERIAN_STATES.includes(formData.state as any)) {
+    if (!formData.fullName.trim()) {
+      setFormError("Please enter your full name");
+      return;
+    }
+    if (!formData.roleDepartment.trim()) {
+      setFormError("Please enter your role and department");
+      return;
+    }
+    if (!formData.state) {
+      setFormError("Please select your state");
+      return;
+    }
+    if (!formData.photo) {
+      setFormError("Please upload or capture a passport photo");
+      return;
+    }
+    if (!NIGERIAN_STATES.includes(formData.state as any)) {
       setStateError("Invalid state selection. Only Nigerian states are allowed.");
       return;
     }
+
     setStateError(null);
     onSubmit(formData);
   };
@@ -102,15 +132,23 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
               ref={webcamRef}
               audio={false}
               screenshotFormat="image/jpeg"
-              videoConstraints={{ facingMode: "user", width: 320, height: 320 }}
+              screenshotQuality={0.92}
+              videoConstraints={{ facingMode, width: 640, height: 640 }}
               className="rounded-lg mx-auto"
               style={{ width: 200, height: 200 }}
+              onUserMediaError={() => setCameraError("Unable to access camera. Please check permissions or use file upload.")}
             />
+            {cameraError && (
+              <p className="text-sm text-destructive text-center font-medium">{cameraError}</p>
+            )}
             <div className="flex gap-2 justify-center">
               <Button type="button" size="sm" onClick={handleCameraCapture} className="bg-accent text-accent-foreground">
                 <Camera className="w-4 h-4 mr-1" /> Capture
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => setShowCamera(false)}>
+              <Button type="button" size="sm" variant="outline" onClick={toggleCamera}>
+                <SwitchCamera className="w-4 h-4 mr-1" /> Flip
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => { setShowCamera(false); setCameraError(null); }}>
                 <X className="w-4 h-4 mr-1" /> Cancel
               </Button>
             </div>
@@ -135,14 +173,14 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
               <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
                 <Upload className="w-3 h-3 mr-1" /> Upload
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => setShowCamera(true)}>
+              <Button type="button" size="sm" variant="outline" onClick={() => { setShowCamera(true); setCameraError(null); }}>
                 <Camera className="w-3 h-3 mr-1" /> Camera
               </Button>
             </div>
           </>
         )}
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
-        <p className="text-xs text-muted-foreground">Passport-style photo recommended</p>
+        <p className="text-xs text-muted-foreground">Passport-style photo recommended (max 5MB)</p>
       </div>
 
       {/* Verification error */}
@@ -152,18 +190,25 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
         </div>
       )}
 
+      {/* Form-level error */}
+      {formError && (
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 text-sm text-destructive font-medium text-center">
+          {formError}
+        </div>
+      )}
+
       {/* Form fields */}
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="fullName" className="flex items-center gap-2 text-sm font-medium">
             <User className="w-4 h-4 text-accent" />
-            Full Name
+            Full Name <span className="text-destructive">*</span>
           </Label>
           <Input
             id="fullName"
             placeholder="Enter full name"
             value={formData.fullName}
-            onChange={(e) => setFormData((prev) => ({ ...prev, fullName: e.target.value.toUpperCase() }))}
+            onChange={(e) => { setFormData((prev) => ({ ...prev, fullName: e.target.value.toUpperCase() })); setFormError(null); }}
             required
             className="uppercase"
           />
@@ -172,13 +217,13 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
         <div className="space-y-2">
           <Label htmlFor="roleDepartment" className="flex items-center gap-2 text-sm font-medium">
             <Briefcase className="w-4 h-4 text-accent" />
-            Role - Department
+            Role - Department <span className="text-destructive">*</span>
           </Label>
           <Input
             id="roleDepartment"
             placeholder="e.g. BD-CARDLESS PAYMENT BUSINESS"
             value={formData.roleDepartment}
-            onChange={(e) => setFormData((prev) => ({ ...prev, roleDepartment: e.target.value.toUpperCase() }))}
+            onChange={(e) => { setFormData((prev) => ({ ...prev, roleDepartment: e.target.value.toUpperCase() })); setFormError(null); }}
             required
             className="uppercase"
           />
@@ -188,7 +233,7 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
         <div className="space-y-2">
           <Label className="flex items-center gap-2 text-sm font-medium">
             <Upload className="w-4 h-4 text-accent" />
-            Company
+            Company <span className="text-destructive">*</span>
           </Label>
           <Select
             value={formData.company}
@@ -206,13 +251,14 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
         <div className="space-y-2">
           <Label className="flex items-center gap-2 text-sm font-medium">
             <MapPin className="w-4 h-4 text-accent" />
-            State
+            State <span className="text-destructive">*</span>
           </Label>
           <Select
             value={formData.state}
             onValueChange={(value) => {
               setFormData((prev) => ({ ...prev, state: value }));
               setStateError(null);
+              setFormError(null);
             }}
           >
             <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
@@ -228,7 +274,7 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
 
       <Button
         type="submit"
-        disabled={isSubmitting || !formData.photo || !formData.fullName || !formData.roleDepartment || !formData.state}
+        disabled={isSubmitting}
         className="w-full h-12 text-base font-display font-semibold bg-accent text-accent-foreground hover:bg-accent/90 transition-all"
       >
         {isSubmitting ? (

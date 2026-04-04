@@ -7,22 +7,33 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email, password, seed_secret } = await req.json();
-
-    // Simple seed secret check to prevent unauthorized bootstrapping
-    if (seed_secret !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.slice(-12)) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Create user
+    // Check if any admin exists - only allow seed if no admins
+    const { data: existingAdmins } = await supabase
+      .from("user_roles")
+      .select("id")
+      .eq("role", "admin")
+      .limit(1);
+
+    if (existingAdmins && existingAdmins.length > 0) {
+      return new Response(JSON.stringify({ error: "Admin already exists. Use the admin panel to create more." }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { email, password } = await req.json();
+    if (!email || !password) {
+      return new Response(JSON.stringify({ error: "Email and password required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -36,7 +47,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Assign admin role
     const { error: roleError } = await supabase
       .from("user_roles")
       .insert({ user_id: newUser.user.id, role: "admin" });

@@ -8,6 +8,22 @@ import { supabase } from "@/integrations/supabase/client";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 
+/**
+ * Flexible name matching: normalizes both names, splits into words,
+ * and checks that all words from one appear in the other (order-independent).
+ */
+const namesMatch = (inputName: string, dbName: string): boolean => {
+  const normalize = (n: string) =>
+    n.toUpperCase().replace(/[^A-Z\s]/g, "").replace(/\s+/g, " ").trim();
+  const inputWords = normalize(inputName).split(" ").filter(Boolean);
+  const dbWords = normalize(dbName).split(" ").filter(Boolean);
+  if (inputWords.length === 0 || dbWords.length === 0) return false;
+  // Check that all input words appear in db words OR all db words appear in input words
+  const allInputInDb = inputWords.every((w) => dbWords.includes(w));
+  const allDbInInput = dbWords.every((w) => inputWords.includes(w));
+  return allInputInDb || allDbInInput;
+};
+
 const Index = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -32,19 +48,17 @@ const Index = () => {
     setVerificationError(null);
 
     try {
-      const rolePart = data.roleDepartment.split("-")[0]?.trim().toUpperCase();
-
-      const { data: verified, error: verifyError } = await supabase
+      // Fetch all verified staff and do flexible name matching client-side
+      const { data: allStaff, error: verifyError } = await supabase
         .from("verified_staff")
-        .select("id")
-        .ilike("full_name", data.fullName.trim())
-        .ilike("role", rolePart)
-        .limit(1);
+        .select("id, full_name, role");
 
       if (verifyError) throw verifyError;
 
-      if (!verified || verified.length === 0) {
-        setVerificationError("You are not authorized to generate an ID. Your details do not match our records. Contact admin.");
+      const matched = allStaff?.find((s) => namesMatch(data.fullName, s.full_name));
+
+      if (!matched) {
+        setVerificationError("You are not authorized to generate an ID. Your name does not match our records. Contact admin.");
         setIsSubmitting(false);
         return;
       }
@@ -143,7 +157,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero header */}
       <header className="gradient-hero py-12 px-6 text-center">
         <div className="max-w-2xl mx-auto space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/20 text-accent-foreground text-xs font-medium mb-2">
@@ -159,7 +172,6 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Main content */}
       <main className="max-w-6xl mx-auto px-6 py-10">
         {!generatedCard ? (
           <div className="max-w-lg mx-auto">
@@ -176,7 +188,6 @@ const Index = () => {
           <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
             <div className="bg-card rounded-xl shadow-card p-6 md:p-8">
               <h2 className="font-display text-xl font-semibold mb-6 text-center">Your ID Card</h2>
-
               <div className="flex flex-col md:flex-row gap-6 justify-center items-center">
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground text-center font-semibold uppercase">Front</p>

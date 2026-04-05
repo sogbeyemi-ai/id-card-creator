@@ -7,6 +7,7 @@ import { AdminSidebar } from "@/components/AdminSidebar";
 const AdminLayout = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -17,16 +18,21 @@ const AdminLayout = () => {
       }
       const { data: roleData } = await supabase
         .from("user_roles")
-        .select("role")
+        .select("role, status")
         .eq("user_id", session.user.id)
-        .eq("role", "admin")
-        .maybeSingle();
+        .in("role", ["admin", "super_admin"]);
 
-      if (!roleData) {
+      const hasAccess = roleData?.some(
+        (r) => r.role === "super_admin" || (r.role === "admin" && r.status === "approved")
+      );
+
+      if (!hasAccess) {
         await supabase.auth.signOut();
         navigate("/admin");
         return;
       }
+
+      setIsSuperAdmin(roleData?.some((r) => r.role === "super_admin") || false);
       setLoading(false);
     };
 
@@ -50,14 +56,14 @@ const AdminLayout = () => {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AdminSidebar />
+        <AdminSidebar isSuperAdmin={isSuperAdmin} />
         <div className="flex-1 flex flex-col">
           <header className="h-12 flex items-center border-b bg-card px-4">
             <SidebarTrigger className="mr-4" />
             <span className="font-display font-semibold text-sm text-foreground">Staff ID Admin</span>
           </header>
           <main className="flex-1 p-4 md:p-6 overflow-auto">
-            <Outlet />
+            <Outlet context={{ isSuperAdmin }} />
           </main>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { Upload, Users, CreditCard, LogOut, Home, BarChart3 } from "lucide-react";
+import { Upload, Users, CreditCard, LogOut, Home, ShieldCheck } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,17 +17,23 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 
-const items = [
-  { title: "Dashboard", url: "/admin/dashboard", icon: Home },
-  { title: "Upload Staff Data", url: "/admin/upload", icon: Upload },
-  { title: "Generated IDs", url: "/admin/entries", icon: CreditCard },
-  { title: "Admin Users", url: "/admin/users", icon: Users },
-];
+interface AdminSidebarProps {
+  isSuperAdmin?: boolean;
+}
 
-export function AdminSidebar() {
+export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const navigate = useNavigate();
+
+  const items = [
+    { title: "Dashboard", url: "/admin/dashboard", icon: Home },
+    { title: "Upload Staff Data", url: "/admin/upload", icon: Upload },
+    { title: "Generated IDs", url: "/admin/entries", icon: CreditCard },
+    ...(isSuperAdmin
+      ? [{ title: "Admin Users", url: "/admin/users", icon: Users }]
+      : []),
+  ];
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -39,7 +45,10 @@ export function AdminSidebar() {
     <Sidebar collapsible="icon">
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Admin Panel</SidebarGroupLabel>
+          <SidebarGroupLabel className="flex items-center gap-1">
+            {isSuperAdmin && <ShieldCheck className="w-3 h-3 text-accent" />}
+            Admin Panel
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (

@@ -63,14 +63,23 @@ const Index = () => {
     setVerificationError(null);
 
     try {
-      // Fetch all verified staff and do flexible name matching client-side
-      const { data: allStaff, error: verifyError } = await supabase
-        .from("verified_staff")
-        .select("id, full_name, role");
+      // Fetch ALL verified staff with pagination (Supabase default limit is 1000)
+      let allStaff: { id: string; full_name: string; role: string }[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data: page, error: verifyError } = await supabase
+          .from("verified_staff")
+          .select("id, full_name, role")
+          .range(from, from + pageSize - 1);
+        if (verifyError) throw verifyError;
+        if (!page || page.length === 0) break;
+        allStaff = allStaff.concat(page);
+        if (page.length < pageSize) break;
+        from += pageSize;
+      }
 
-      if (verifyError) throw verifyError;
-
-      const matched = allStaff?.find((s) => namesMatch(data.fullName, s.full_name));
+      const matched = allStaff.find((s) => namesMatch(data.fullName, s.full_name));
 
       if (!matched) {
         setVerificationError("You are not authorized to generate an ID. Your name does not match our records. Contact admin.");

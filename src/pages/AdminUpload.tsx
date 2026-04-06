@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet, CheckCircle, Plus, Trash2, AlertTriangle } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle, Plus, Trash2, AlertTriangle, Edit2, Save, X, ChevronDown, ChevronUp, Search } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,11 +15,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface UploadBatch {
   batch_id: string;
   record_count: number;
   uploaded_at: string;
+}
+
+interface StaffRecord {
+  id: string;
+  full_name: string;
+  role: string;
+  department: string | null;
+  state: string | null;
+  company: string | null;
 }
 
 const AdminUpload = () => {
@@ -30,15 +48,37 @@ const AdminUpload = () => {
   const [deletingBatch, setDeletingBatch] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
+  // Batch records editing
+  const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
+  const [batchRecords, setBatchRecords] = useState<StaffRecord[]>([]);
+  const [loadingRecords, setLoadingRecords] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<Partial<StaffRecord>>({});
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const fetchAllFromTable = async (select: string, filter?: { col: string; val: string }) => {
+    let all: any[] = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      let query = supabase.from("verified_staff").select(select).range(from, from + pageSize - 1);
+      if (filter) query = (query as any).eq(filter.col, filter.val);
+      const { data, error } = await query;
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      all = all.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
+  };
+
   const fetchBatches = async () => {
     setLoadingBatches(true);
-    const { data, error } = await supabase
-      .from("verified_staff")
-      .select("batch_id, created_at");
-
-    if (!error && data) {
+    try {
+      const data = await fetchAllFromTable("batch_id, created_at");
       const grouped: Record<string, UploadBatch> = {};
-      data.forEach((row) => {
+      data.forEach((row: any) => {
         const bid = row.batch_id || "unknown";
         if (!grouped[bid]) {
           grouped[bid] = { batch_id: bid, record_count: 0, uploaded_at: row.created_at };
@@ -49,11 +89,74 @@ const AdminUpload = () => {
         }
       });
       setBatches(Object.values(grouped).sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at)));
+    } catch {
+      // silent
     }
     setLoadingBatches(false);
   };
 
+  const fetchBatchRecords = async (batchId: string) => {
+    setLoadingRecords(true);
+    try {
+      const data = await fetchAllFromTable(
+        "id, full_name, role, department, state, company",
+        { col: "batch_id", val: batchId }
+      );
+      setBatchRecords(data as StaffRecord[]);
+    } catch {
+      toast.error("Failed to load records");
+    }
+    setLoadingRecords(false);
+  };
+
   useEffect(() => { fetchBatches(); }, []);
+
+  const toggleBatch = (batchId: string) => {
+    if (expandedBatch === batchId) {
+      setExpandedBatch(null);
+      setBatchRecords([]);
+      setSearchTerm("");
+    } else {
+      setExpandedBatch(batchId);
+      fetchBatchRecords(batchId);
+      setSearchTerm("");
+    }
+    setEditingId(null);
+  };
+
+  const startEdit = (record: StaffRecord) => {
+    setEditingId(record.id);
+    setEditData({ full_name: record.full_name, role: record.role, department: record.department, state: record.state, company: record.company });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditData({});
+  };
+
+  const saveEdit = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("verified_staff")
+        .update({
+          full_name: editData.full_name || "",
+          role: editData.role || "",
+          department: editData.department || null,
+          state: editData.state || null,
+          company: editData.company || null,
+        })
+        .eq("id", id);
+      if (error) throw error;
+      setBatchRecords((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, ...editData } : r))
+      );
+      setEditingId(null);
+      setEditData({});
+      toast.success("Record updated successfully");
+    } catch (err: any) {
+      toast.error("Failed to update: " + err.message);
+    }
+  };
 
   const handleDeleteBatch = async (batchId: string) => {
     setDeletingBatch(batchId);
@@ -64,6 +167,10 @@ const AdminUpload = () => {
         .eq("batch_id", batchId);
       if (error) throw error;
       toast.success("Upload batch deleted successfully");
+      if (expandedBatch === batchId) {
+        setExpandedBatch(null);
+        setBatchRecords([]);
+      }
       fetchBatches();
     } catch (err: any) {
       toast.error("Failed to delete: " + err.message);
@@ -109,11 +216,21 @@ const AdminUpload = () => {
     }
   };
 
+  const filteredRecords = batchRecords.filter((r) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toUpperCase();
+    return (
+      r.full_name.toUpperCase().includes(term) ||
+      r.role.toUpperCase().includes(term) ||
+      (r.department || "").toUpperCase().includes(term)
+    );
+  });
+
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-4xl">
       <h1 className="font-display text-2xl font-bold">Upload Verified Staff Data</h1>
       <p className="text-muted-foreground text-sm">
-        Upload one or more Excel (.xlsx) files containing verified staff records. New data is <strong>added</strong> to existing records (no overwriting).
+        Upload one or more Excel (.xlsx) files containing verified staff records. New data is <strong>added</strong> to existing records.
         Required columns: <strong>Full Name</strong>, <strong>Role</strong>. Optional: Department, State, Company.
       </p>
 
@@ -185,26 +302,107 @@ const AdminUpload = () => {
       ) : (
         <div className="space-y-3">
           {batches.map((batch) => (
-            <Card key={batch.batch_id} className="p-4 flex items-center justify-between">
-              <div>
-                <p className="font-medium text-sm">Batch: {batch.batch_id.slice(0, 8)}…</p>
-                <p className="text-xs text-muted-foreground">
-                  {batch.record_count} records · Uploaded {new Date(batch.uploaded_at).toLocaleDateString()} {new Date(batch.uploaded_at).toLocaleTimeString()}
-                </p>
-              </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={deletingBatch === batch.batch_id}
-                onClick={() => setConfirmDelete(batch.batch_id)}
-              >
-                {deletingBatch === batch.batch_id ? (
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
-              </Button>
-            </Card>
+            <div key={batch.batch_id}>
+              <Card className="p-4 flex items-center justify-between">
+                <button
+                  className="flex-1 text-left flex items-center gap-2"
+                  onClick={() => toggleBatch(batch.batch_id)}
+                >
+                  {expandedBatch === batch.batch_id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  <div>
+                    <p className="font-medium text-sm">Batch: {batch.batch_id.slice(0, 8)}…</p>
+                    <p className="text-xs text-muted-foreground">
+                      {batch.record_count} records · Uploaded {new Date(batch.uploaded_at).toLocaleDateString()} {new Date(batch.uploaded_at).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={deletingBatch === batch.batch_id}
+                  onClick={() => setConfirmDelete(batch.batch_id)}
+                >
+                  {deletingBatch === batch.batch_id ? (
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                </Button>
+              </Card>
+
+              {/* Expanded batch records */}
+              {expandedBatch === batch.batch_id && (
+                <Card className="mt-1 p-4 border-t-0 rounded-t-none">
+                  {loadingRecords ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">Loading records…</p>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Search className="w-4 h-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search records…"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground whitespace-nowrap">{filteredRecords.length} records</p>
+                      </div>
+                      <div className="max-h-96 overflow-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs">Full Name</TableHead>
+                              <TableHead className="text-xs">Role</TableHead>
+                              <TableHead className="text-xs">Department</TableHead>
+                              <TableHead className="text-xs">State</TableHead>
+                              <TableHead className="text-xs">Company</TableHead>
+                              <TableHead className="text-xs w-20">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredRecords.slice(0, 100).map((record) => (
+                              <TableRow key={record.id}>
+                                {editingId === record.id ? (
+                                  <>
+                                    <TableCell><Input value={editData.full_name || ""} onChange={(e) => setEditData((d) => ({ ...d, full_name: e.target.value }))} className="h-7 text-xs" /></TableCell>
+                                    <TableCell><Input value={editData.role || ""} onChange={(e) => setEditData((d) => ({ ...d, role: e.target.value }))} className="h-7 text-xs" /></TableCell>
+                                    <TableCell><Input value={editData.department || ""} onChange={(e) => setEditData((d) => ({ ...d, department: e.target.value }))} className="h-7 text-xs" /></TableCell>
+                                    <TableCell><Input value={editData.state || ""} onChange={(e) => setEditData((d) => ({ ...d, state: e.target.value }))} className="h-7 text-xs" /></TableCell>
+                                    <TableCell><Input value={editData.company || ""} onChange={(e) => setEditData((d) => ({ ...d, company: e.target.value }))} className="h-7 text-xs" /></TableCell>
+                                    <TableCell>
+                                      <div className="flex gap-1">
+                                        <button onClick={() => saveEdit(record.id)} className="text-accent hover:text-accent/80"><Save className="w-4 h-4" /></button>
+                                        <button onClick={cancelEdit} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+                                      </div>
+                                    </TableCell>
+                                  </>
+                                ) : (
+                                  <>
+                                    <TableCell className="text-xs font-medium">{record.full_name}</TableCell>
+                                    <TableCell className="text-xs">{record.role}</TableCell>
+                                    <TableCell className="text-xs">{record.department || "—"}</TableCell>
+                                    <TableCell className="text-xs">{record.state || "—"}</TableCell>
+                                    <TableCell className="text-xs">{record.company || "—"}</TableCell>
+                                    <TableCell>
+                                      <button onClick={() => startEdit(record)} className="text-accent hover:text-accent/80"><Edit2 className="w-4 h-4" /></button>
+                                    </TableCell>
+                                  </>
+                                )}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        {filteredRecords.length > 100 && (
+                          <p className="text-xs text-muted-foreground text-center py-2">
+                            Showing 100 of {filteredRecords.length} records. Use search to filter.
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </Card>
+              )}
+            </div>
           ))}
         </div>
       )}

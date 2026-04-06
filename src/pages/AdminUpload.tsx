@@ -56,13 +56,13 @@ const AdminUpload = () => {
   const [editData, setEditData] = useState<Partial<StaffRecord>>({});
   const [searchTerm, setSearchTerm] = useState("");
 
-  const fetchAllFromTable = async (table: string, select: string, filter?: { col: string; val: string }) => {
+  const fetchAllFromTable = async (select: string, filter?: { col: string; val: string }) => {
     let all: any[] = [];
     let from = 0;
     const pageSize = 1000;
     while (true) {
-      let query = supabase.from(table).select(select).range(from, from + pageSize - 1);
-      if (filter) query = query.eq(filter.col, filter.val);
+      let query = supabase.from("verified_staff").select(select).range(from, from + pageSize - 1);
+      if (filter) query = (query as any).eq(filter.col, filter.val);
       const { data, error } = await query;
       if (error) throw error;
       if (!data || data.length === 0) break;

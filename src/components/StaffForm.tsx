@@ -73,19 +73,32 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
   const handleCameraCapture = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot({ width: 640, height: 640 });
     if (imageSrc) {
-      fetch(imageSrc)
-        .then((res) => res.blob())
-        .then((blob) => {
-          const file = new File([blob], "camera-photo.jpg", { type: "image/jpeg" });
-          setFormData((prev) => ({
-            ...prev,
-            photo: file,
-            photoPreview: imageSrc,
-          }));
-          setShowCamera(false);
-          setCameraError(null);
-          setFormError(null);
-        });
+      // Flip the image horizontally to undo the mirror effect
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, 0, 0);
+        const correctedSrc = canvas.toDataURL("image/jpeg", 0.92);
+        fetch(correctedSrc)
+          .then((res) => res.blob())
+          .then((blob) => {
+            const file = new File([blob], "camera-photo.jpg", { type: "image/jpeg" });
+            setFormData((prev) => ({
+              ...prev,
+              photo: file,
+              photoPreview: correctedSrc,
+            }));
+            setShowCamera(false);
+            setCameraError(null);
+            setFormError(null);
+          });
+      };
+      img.src = imageSrc;
     }
   }, []);
 

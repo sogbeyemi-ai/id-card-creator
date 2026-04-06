@@ -12,16 +12,31 @@ import { jsPDF } from "jspdf";
  * Flexible name matching: normalizes both names, splits into words,
  * and checks that all words from one appear in the other (order-independent).
  */
+/**
+ * Flexible name matching: normalizes both names, removes punctuation,
+ * splits into words, sorts alphabetically, and checks overlap.
+ * Handles: order differences, commas, extra spaces, middle names optional.
+ */
 const namesMatch = (inputName: string, dbName: string): boolean => {
   const normalize = (n: string) =>
     n.toUpperCase().replace(/[^A-Z\s]/g, "").replace(/\s+/g, " ").trim();
-  const inputWords = normalize(inputName).split(" ").filter(Boolean);
-  const dbWords = normalize(dbName).split(" ").filter(Boolean);
+  const inputWords = normalize(inputName).split(" ").filter(Boolean).sort();
+  const dbWords = normalize(dbName).split(" ").filter(Boolean).sort();
   if (inputWords.length === 0 || dbWords.length === 0) return false;
-  // Check that all input words appear in db words OR all db words appear in input words
-  const allInputInDb = inputWords.every((w) => dbWords.includes(w));
-  const allDbInInput = dbWords.every((w) => inputWords.includes(w));
-  return allInputInDb || allDbInInput;
+
+  // Exact set match (order-independent)
+  if (inputWords.length === dbWords.length && inputWords.every((w, i) => w === dbWords[i])) return true;
+
+  // All input words found in db words (user may omit middle name)
+  if (inputWords.every((w) => dbWords.includes(w))) return true;
+  // All db words found in input words (db may have fewer words)
+  if (dbWords.every((w) => inputWords.includes(w))) return true;
+
+  // At least first + last name match (minimum 2 words overlap)
+  const overlap = inputWords.filter((w) => dbWords.includes(w));
+  if (overlap.length >= 2) return true;
+
+  return false;
 };
 
 const Index = () => {

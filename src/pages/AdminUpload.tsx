@@ -76,7 +76,7 @@ const AdminUpload = () => {
   const fetchBatches = async () => {
     setLoadingBatches(true);
     try {
-      const data = await fetchAllFromTable("verified_staff", "batch_id, created_at");
+      const data = await fetchAllFromTable("batch_id, created_at");
       const grouped: Record<string, UploadBatch> = {};
       data.forEach((row: any) => {
         const bid = row.batch_id || "unknown";
@@ -99,7 +99,6 @@ const AdminUpload = () => {
     setLoadingRecords(true);
     try {
       const data = await fetchAllFromTable(
-        "verified_staff",
         "id, full_name, role, department, state, company",
         { col: "batch_id", val: batchId }
       );

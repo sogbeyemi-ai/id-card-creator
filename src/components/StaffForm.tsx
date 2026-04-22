@@ -264,7 +264,7 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
               </span>
             )}
             {lookup.status === "found" && (
-              <span className="ml-auto inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
                 <CheckCircle2 className="w-3 h-3" /> Verified
               </span>
             )}
@@ -291,7 +291,7 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
             <Briefcase className="w-4 h-4 text-accent" />
             Role - Department <span className="text-destructive">*</span>
             {autoFilled && !departmentMissing && (
-              <span className="ml-auto inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
                 <CheckCircle2 className="w-3 h-3" /> Auto-filled
               </span>
             )}
@@ -309,7 +309,7 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
             className="uppercase"
           />
           {departmentMissing ? (
-            <p className="text-xs text-amber-600 font-medium">
+            <p className="text-xs text-accent font-medium">
               Please enter your department after the role (format: ROLE-DEPARTMENT)
             </p>
           ) : (

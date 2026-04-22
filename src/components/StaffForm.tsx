@@ -149,8 +149,15 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
       setFormError("Please enter your full name");
       return;
     }
-    if (!formData.roleDepartment.trim()) {
+    const rd = formData.roleDepartment.trim();
+    if (!rd) {
       setFormError("Please enter your role and department");
+      return;
+    }
+    // If auto-filled with missing department, ensure user appended a department after the dash
+    const parts = rd.split("-").map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) {
+      setFormError("Please enter your department after the role (format: ROLE-DEPARTMENT)");
       return;
     }
     if (!formData.state) {

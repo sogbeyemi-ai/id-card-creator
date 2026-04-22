@@ -251,31 +251,63 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
           <Label htmlFor="fullName" className="flex items-center gap-2 text-sm font-medium">
             <User className="w-4 h-4 text-accent" />
             Full Name <span className="text-destructive">*</span>
+            {lookup.status === "searching" && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground font-normal">
+                <Loader2 className="w-3 h-3 animate-spin" /> Verifying records…
+              </span>
+            )}
+            {lookup.status === "found" && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                <CheckCircle2 className="w-3 h-3" /> Verified
+              </span>
+            )}
           </Label>
           <Input
             id="fullName"
             placeholder="Enter full name"
             value={formData.fullName}
-            onChange={(e) => { setFormData((prev) => ({ ...prev, fullName: e.target.value.toUpperCase() })); setFormError(null); }}
+            onChange={(e) => {
+              setFormData((prev) => ({ ...prev, fullName: e.target.value.toUpperCase() }));
+              setFormError(null);
+              setRoleDeptManuallyEdited(false);
+            }}
             required
             className="uppercase"
           />
+          {lookup.status === "not_found" && formData.fullName.trim().split(/\s+/).filter(Boolean).length >= 2 && (
+            <p className="text-xs text-destructive">No matching record found. Check spelling or contact admin.</p>
+          )}
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="roleDepartment" className="flex items-center gap-2 text-sm font-medium">
             <Briefcase className="w-4 h-4 text-accent" />
             Role - Department <span className="text-destructive">*</span>
+            {autoFilled && !departmentMissing && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                <CheckCircle2 className="w-3 h-3" /> Auto-filled
+              </span>
+            )}
           </Label>
           <Input
             id="roleDepartment"
             placeholder="e.g. BD-CARDLESS PAYMENT BUSINESS"
             value={formData.roleDepartment}
-            onChange={(e) => { setFormData((prev) => ({ ...prev, roleDepartment: e.target.value.toUpperCase() })); setFormError(null); }}
+            onChange={(e) => {
+              setFormData((prev) => ({ ...prev, roleDepartment: e.target.value.toUpperCase() }));
+              setFormError(null);
+              setRoleDeptManuallyEdited(true);
+            }}
             required
             className="uppercase"
           />
-          <p className="text-xs text-muted-foreground">Format: ROLE-DEPARTMENT (e.g. BD-OFFLINE OPERATION)</p>
+          {departmentMissing ? (
+            <p className="text-xs text-amber-600 font-medium">
+              Please enter your department after the role (format: ROLE-DEPARTMENT)
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">Format: ROLE-DEPARTMENT (e.g. BD-OFFLINE OPERATION)</p>
+          )}
         </div>
 
         <div className="space-y-2">

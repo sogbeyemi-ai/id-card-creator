@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,13 +6,45 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { RefreshCw, Unlock, Lock, Search, CreditCard, Download } from "lucide-react";
+import {
+  RefreshCw,
+  Unlock,
+  Lock,
+  Search,
+  CreditCard,
+  Download,
+  Pencil,
+  PackageOpen,
+  Filter,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IDCardFront, IDCardBack } from "@/components/IDCardPreview";
 import type { CompanyTemplate } from "@/components/StaffForm";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import JSZip from "jszip";
+import { createRoot } from "react-dom/client";
 
 interface StaffEntry {
   id: string;
@@ -36,11 +68,31 @@ interface VerifiedStaff {
   company: string | null;
 }
 
+const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
+
 const AdminEntries = () => {
   const [entries, setEntries] = useState<StaffEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
   const [tab, setTab] = useState<"entries" | "generate">("entries");
+
+  // Filters
+  const [searchTerm, setSearchTerm] = useState("");
+  const [cityFilter, setCityFilter] = useState<string>("all");
+  const [roleDeptFilter, setRoleDeptFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Bulk download
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
+
+  // Edit dialog
+  const [editEntry, setEditEntry] = useState<StaffEntry | null>(null);
+  const [editForm, setEditForm] = useState({ full_name: "", roleDept: "", state: "" });
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Generate state
   const [verifiedStaff, setVerifiedStaff] = useState<VerifiedStaff[]>([]);
@@ -59,13 +111,26 @@ const AdminEntries = () => {
 
   const fetchEntries = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("staff_entries")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) toast.error(error.message);
-    else setEntries((data as StaffEntry[]) || []);
+    // Paginate to bypass 1000-row default
+    const pageSize = 1000;
+    let from = 0;
+    const all: StaffEntry[] = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from("staff_entries")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (error) {
+        toast.error(error.message);
+        break;
+      }
+      const batch = (data as StaffEntry[]) || [];
+      all.push(...batch);
+      if (batch.length < pageSize) break;
+      from += pageSize;
+    }
+    setEntries(all);
     setLoading(false);
   };
 
@@ -98,13 +163,276 @@ const AdminEntries = () => {
     }
   };
 
-  const filteredEntries = entries.filter(
-    (e) =>
-      e.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (e.state || "").toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Unique values for filter dropdowns
+  const cityOptions = useMemo(() => {
+    const set = new Set<string>();
+    entries.forEach((e) => {
+      if (e.state) set.add(e.state.trim());
+    });
+    return Array.from(set).sort();
+  }, [entries]);
 
+  const roleDeptOptions = useMemo(() => {
+    const set = new Set<string>();
+    entries.forEach((e) => {
+      const rd = [e.role, e.department].filter(Boolean).join("-");
+      if (rd) set.add(rd);
+    });
+    return Array.from(set).sort();
+  }, [entries]);
+
+  const filteredEntries = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+    return entries.filter((e) => {
+      const rd = [e.role, e.department].filter(Boolean).join("-");
+      if (q) {
+        const blob = `${e.full_name} ${rd} ${e.state || ""} ${e.company}`.toLowerCase();
+        if (!blob.includes(q)) return false;
+      }
+      if (cityFilter !== "all" && (e.state || "").trim() !== cityFilter) return false;
+      if (roleDeptFilter !== "all" && rd !== roleDeptFilter) return false;
+      if (statusFilter !== "all") {
+        const downloaded = e.download_count > 0;
+        if (statusFilter === "downloaded" && !downloaded) return false;
+        if (statusFilter === "generated" && downloaded) return false;
+        if (statusFilter === "locked" && !e.download_locked) return false;
+      }
+      return true;
+    });
+  }, [entries, searchTerm, cityFilter, roleDeptFilter, statusFilter]);
+
+  const allFilteredSelected =
+    filteredEntries.length > 0 && filteredEntries.every((e) => selectedIds.has(e.id));
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      const next = new Set(selectedIds);
+      filteredEntries.forEach((e) => next.delete(e.id));
+      setSelectedIds(next);
+    } else {
+      const next = new Set(selectedIds);
+      filteredEntries.forEach((e) => next.add(e.id));
+      setSelectedIds(next);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setCityFilter("all");
+    setRoleDeptFilter("all");
+    setStatusFilter("all");
+  };
+
+  // Render an ID card off-screen and return the rendered front+back canvases
+  const renderCardToCanvases = async (
+    entry: StaffEntry
+  ): Promise<{ front: HTMLCanvasElement; back: HTMLCanvasElement }> => {
+    return new Promise((resolve, reject) => {
+      const host = document.createElement("div");
+      host.style.position = "fixed";
+      host.style.left = "-99999px";
+      host.style.top = "0";
+      host.style.width = "350px";
+      document.body.appendChild(host);
+
+      const root = createRoot(host);
+      const frontHolder = document.createElement("div");
+      const backHolder = document.createElement("div");
+      host.appendChild(frontHolder);
+      host.appendChild(backHolder);
+
+      const cleanup = () => {
+        try {
+          root.unmount();
+        } catch {
+          /* noop */
+        }
+        host.remove();
+      };
+
+      try {
+        const roleDept = [entry.role, entry.department].filter(Boolean).join("-");
+        const company = entry.company as CompanyTemplate;
+
+        // Use refs via callback
+        let frontEl: HTMLDivElement | null = null;
+        let backEl: HTMLDivElement | null = null;
+
+        root.render(
+          <div>
+            <div ref={(el) => (frontEl = el)}>
+              <IDCardFront
+                fullName={entry.full_name}
+                roleDepartment={roleDept}
+                state={entry.state || ""}
+                company={company}
+                photoUrl={entry.photo_url}
+              />
+            </div>
+            <div ref={(el) => (backEl = el)}>
+              <IDCardBack company={company} />
+            </div>
+          </div>
+        );
+
+        // Wait for images to load then capture
+        setTimeout(async () => {
+          try {
+            // Wait for all images inside host to load
+            const imgs = Array.from(host.querySelectorAll("img"));
+            await Promise.all(
+              imgs.map(
+                (img) =>
+                  new Promise<void>((res) => {
+                    if (img.complete && img.naturalWidth > 0) return res();
+                    img.onload = () => res();
+                    img.onerror = () => res();
+                  })
+              )
+            );
+
+            const frontTarget = (frontEl?.firstElementChild as HTMLElement) || frontEl!;
+            const backTarget = (backEl?.firstElementChild as HTMLElement) || backEl!;
+
+            const front = await html2canvas(frontTarget, {
+              scale: 2,
+              useCORS: true,
+              backgroundColor: "#ffffff",
+            });
+            const back = await html2canvas(backTarget, {
+              scale: 2,
+              useCORS: true,
+              backgroundColor: "#ffffff",
+            });
+            cleanup();
+            resolve({ front, back });
+          } catch (err) {
+            cleanup();
+            reject(err);
+          }
+        }, 600);
+      } catch (err) {
+        cleanup();
+        reject(err);
+      }
+    });
+  };
+
+  const buildPdfBlob = async (entry: StaffEntry): Promise<Blob> => {
+    const { front, back } = await renderCardToCanvases(entry);
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [85.6, 130] });
+    pdf.addImage(front.toDataURL("image/png"), "PNG", 0, 0, 85.6, 130);
+    pdf.addPage([85.6, 130], "portrait");
+    pdf.addImage(back.toDataURL("image/png"), "PNG", 0, 0, 85.6, 130);
+    return pdf.output("blob");
+  };
+
+  const handleBulkDownload = async () => {
+    const targets = entries.filter((e) => selectedIds.has(e.id));
+    if (targets.length === 0) {
+      toast.error("Select at least one record");
+      return;
+    }
+    setBulkDownloading(true);
+    setBulkProgress(0);
+    const zip = new JSZip();
+    let done = 0;
+    let failed = 0;
+
+    for (const entry of targets) {
+      try {
+        const blob = await buildPdfBlob(entry);
+        const safeName = sanitize(entry.full_name) || "ID";
+        const shortId = entry.id.slice(0, 8);
+        zip.file(`${safeName}_${shortId}.pdf`, blob);
+      } catch (err) {
+        console.error("Failed to render card", entry.id, err);
+        failed++;
+      }
+      done++;
+      setBulkProgress(Math.round((done / targets.length) * 100));
+    }
+
+    try {
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      const stamp = new Date().toISOString().slice(0, 10);
+      const cityTag = cityFilter !== "all" ? `_${sanitize(cityFilter)}` : "";
+      a.download = `id_cards${cityTag}_${stamp}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(
+        failed > 0
+          ? `Downloaded ${targets.length - failed}/${targets.length} cards (${failed} failed)`
+          : `Downloaded ${targets.length} ID cards`
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to build ZIP");
+    } finally {
+      setBulkDownloading(false);
+      setBulkProgress(0);
+    }
+  };
+
+  // Edit handlers
+  const openEdit = (entry: StaffEntry) => {
+    setEditEntry(entry);
+    setEditForm({
+      full_name: entry.full_name,
+      roleDept: [entry.role, entry.department].filter(Boolean).join("-"),
+      state: entry.state || "",
+    });
+  };
+
+  const requestSaveEdit = () => {
+    if (!editForm.full_name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    setConfirmSaveOpen(true);
+  };
+
+  const confirmSaveEdit = async () => {
+    if (!editEntry) return;
+    setSavingEdit(true);
+    const [rolePart, ...deptParts] = editForm.roleDept.split("-");
+    const role = (rolePart || "").trim();
+    const department = deptParts.join("-").trim();
+
+    const { error } = await supabase
+      .from("staff_entries")
+      .update({
+        full_name: editForm.full_name.trim(),
+        role,
+        department,
+        state: editForm.state.trim() || null,
+      })
+      .eq("id", editEntry.id);
+
+    setSavingEdit(false);
+    setConfirmSaveOpen(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Record updated");
+    setEditEntry(null);
+    fetchEntries();
+  };
+
+  // Generate-tab handlers (unchanged behavior)
   const filteredStaff = verifiedStaff.filter(
     (s) =>
       s.full_name.toLowerCase().includes(staffSearch.toLowerCase()) ||
@@ -137,8 +465,6 @@ const AdminEntries = () => {
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from("staff-photos").getPublicUrl(fileName);
-
-      const roleDept = [selectedStaff.role, selectedStaff.department].filter(Boolean).join("-");
 
       const { data: entry, error: insertError } = await supabase
         .from("staff_entries")
@@ -185,6 +511,12 @@ const AdminEntries = () => {
     }
   };
 
+  const activeFilterCount =
+    (searchTerm ? 1 : 0) +
+    (cityFilter !== "all" ? 1 : 0) +
+    (roleDeptFilter !== "all" ? 1 : 0) +
+    (statusFilter !== "all" ? 1 : 0);
+
   return (
     <div className="space-y-6">
       {/* Tab switcher */}
@@ -210,81 +542,269 @@ const AdminEntries = () => {
       {tab === "entries" ? (
         <>
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <h1 className="font-display text-2xl font-bold">Generated ID Cards</h1>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name, company, state…"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 w-64"
-                />
-              </div>
+            <div>
+              <h1 className="font-display text-2xl font-bold">Generated ID Cards</h1>
+              <p className="text-sm text-muted-foreground">
+                {loading
+                  ? "Loading records…"
+                  : `${filteredEntries.length} of ${entries.length} records${
+                      selectedIds.size > 0 ? ` · ${selectedIds.size} selected` : ""
+                    }`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
               <Button variant="outline" size="sm" onClick={fetchEntries} disabled={loading}>
                 <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} />
                 Refresh
               </Button>
+              <Button
+                size="sm"
+                disabled={selectedIds.size === 0 || bulkDownloading}
+                onClick={handleBulkDownload}
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                {bulkDownloading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
+                    Preparing… {bulkProgress}%
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <PackageOpen className="w-4 h-4" />
+                    Bulk Download ({selectedIds.size})
+                  </span>
+                )}
+              </Button>
             </div>
           </div>
+
+          {/* Filter bar */}
+          <Card className="p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Filter className="w-4 h-4 text-accent" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {activeFilterCount} active
+                </Badge>
+              )}
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearFilters} className="ml-auto h-7">
+                  <X className="w-3 h-3 mr-1" /> Clear
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search name, role, city…"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={cityFilter} onValueChange={setCityFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="City / State" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value="all">All Cities</SelectItem>
+                  {cityOptions.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={roleDeptFilter} onValueChange={setRoleDeptFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Role - Department" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value="all">All Roles</SelectItem>
+                  {roleDeptOptions.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="generated">Generated (not downloaded)</SelectItem>
+                  <SelectItem value="downloaded">Downloaded</SelectItem>
+                  <SelectItem value="locked">Locked</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </Card>
 
           <div className="rounded-lg border bg-card overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allFilteredSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Role</TableHead>
+                  <TableHead>Role - Department</TableHead>
+                  <TableHead>City / State</TableHead>
                   <TableHead>Company</TableHead>
-                  <TableHead>State</TableHead>
                   <TableHead>Downloads</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredEntries.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                      {loading ? "Loading…" : "No entries found"}
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                      {loading ? "Filtering records…" : "No entries match the current filters"}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredEntries.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell className="font-medium">{entry.full_name}</TableCell>
-                      <TableCell>{entry.role}</TableCell>
-                      <TableCell>{entry.company}</TableCell>
-                      <TableCell>{entry.state || "—"}</TableCell>
-                      <TableCell>{entry.download_count}</TableCell>
-                      <TableCell>
-                        {entry.download_locked ? (
-                          <Badge variant="destructive" className="text-xs">Locked</Badge>
-                        ) : entry.download_count > 0 ? (
-                          <Badge variant="secondary" className="text-xs">Downloaded</Badge>
-                        ) : (
-                          <Badge className="text-xs bg-accent text-accent-foreground">Available</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleDownloadLock(entry)}
-                          title={entry.download_locked ? "Unlock download" : "Lock download"}
-                        >
+                  filteredEntries.map((entry) => {
+                    const rd = [entry.role, entry.department].filter(Boolean).join("-");
+                    return (
+                      <TableRow
+                        key={entry.id}
+                        data-state={selectedIds.has(entry.id) ? "selected" : undefined}
+                      >
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(entry.id)}
+                            onCheckedChange={() => toggleSelect(entry.id)}
+                            aria-label={`Select ${entry.full_name}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{entry.full_name}</TableCell>
+                        <TableCell>{rd || "—"}</TableCell>
+                        <TableCell>{entry.state || "—"}</TableCell>
+                        <TableCell>{entry.company}</TableCell>
+                        <TableCell>{entry.download_count}</TableCell>
+                        <TableCell>
                           {entry.download_locked ? (
-                            <Unlock className="w-4 h-4 text-accent" />
+                            <Badge variant="destructive" className="text-xs">
+                              Locked
+                            </Badge>
+                          ) : entry.download_count > 0 ? (
+                            <Badge variant="secondary" className="text-xs">
+                              Downloaded
+                            </Badge>
                           ) : (
-                            <Lock className="w-4 h-4 text-muted-foreground" />
+                            <Badge className="text-xs bg-accent text-accent-foreground">Generated</Badge>
                           )}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEdit(entry)}
+                              title="Edit record"
+                            >
+                              <Pencil className="w-4 h-4 text-muted-foreground" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleDownloadLock(entry)}
+                              title={entry.download_locked ? "Unlock download" : "Lock download"}
+                            >
+                              {entry.download_locked ? (
+                                <Unlock className="w-4 h-4 text-accent" />
+                              ) : (
+                                <Lock className="w-4 h-4 text-muted-foreground" />
+                              )}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
           </div>
+
+          {/* Edit dialog */}
+          <Dialog open={!!editEntry} onOpenChange={(open) => !open && setEditEntry(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Staff Record</DialogTitle>
+                <DialogDescription>
+                  Update name, role-department, and city. Changes apply only to this generated ID record.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                <div className="space-y-1">
+                  <Label htmlFor="edit-name">Full Name</Label>
+                  <Input
+                    id="edit-name"
+                    value={editForm.full_name}
+                    onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-roledept">Role - Department</Label>
+                  <Input
+                    id="edit-roledept"
+                    placeholder="e.g. Technician-Field Operations"
+                    value={editForm.roleDept}
+                    onChange={(e) => setEditForm({ ...editForm, roleDept: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-state">City / State</Label>
+                  <Input
+                    id="edit-state"
+                    placeholder="e.g. Lagos"
+                    value={editForm.state}
+                    onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditEntry(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={requestSaveEdit}
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
+                >
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Confirm save */}
+          <AlertDialog open={confirmSaveOpen} onOpenChange={setConfirmSaveOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Save changes?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will update the record for{" "}
+                  <strong>{editEntry?.full_name}</strong>. The change cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={savingEdit}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmSaveEdit} disabled={savingEdit}>
+                  {savingEdit ? "Saving…" : "Confirm & Save"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </>
       ) : (
         /* Admin Generate ID */
@@ -293,7 +813,6 @@ const AdminEntries = () => {
 
           {!generatedCard ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Select staff */}
               <Card className="p-6 space-y-4">
                 <h3 className="font-semibold">1. Select Verified Staff</h3>
                 <div className="relative">
@@ -318,30 +837,41 @@ const AdminEntries = () => {
                         }`}
                       >
                         <p className="font-medium">{s.full_name}</p>
-                        <p className="text-xs text-muted-foreground">{s.role} {s.department ? `- ${s.department}` : ""}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {s.role} {s.department ? `- ${s.department}` : ""}
+                        </p>
                       </button>
                     ))
                   )}
                 </div>
               </Card>
 
-              {/* Configure & generate */}
               <Card className="p-6 space-y-4">
                 <h3 className="font-semibold">2. Configure & Generate</h3>
 
                 {selectedStaff && (
                   <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
-                    <p><strong>Name:</strong> {selectedStaff.full_name}</p>
-                    <p><strong>Role:</strong> {selectedStaff.role}</p>
-                    <p><strong>Department:</strong> {selectedStaff.department || "—"}</p>
-                    <p><strong>State:</strong> {selectedStaff.state || "—"}</p>
+                    <p>
+                      <strong>Name:</strong> {selectedStaff.full_name}
+                    </p>
+                    <p>
+                      <strong>Role:</strong> {selectedStaff.role}
+                    </p>
+                    <p>
+                      <strong>Department:</strong> {selectedStaff.department || "—"}
+                    </p>
+                    <p>
+                      <strong>State:</strong> {selectedStaff.state || "—"}
+                    </p>
                   </div>
                 )}
 
                 <div className="space-y-2">
                   <Label>Company Template</Label>
                   <Select value={genCompany} onValueChange={(v: CompanyTemplate) => setGenCompany(v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="SOTI">SOTI</SelectItem>
                       <SelectItem value="OPAY">OPAY</SelectItem>
@@ -352,13 +882,27 @@ const AdminEntries = () => {
 
                 <div className="space-y-2">
                   <Label>Passport Photo</Label>
-                  <input ref={photoInputRef} type="file" accept="image/*" onChange={handleGenPhoto} className="hidden" />
-                  <Button variant="outline" className="w-full" onClick={() => photoInputRef.current?.click()}>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleGenPhoto}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => photoInputRef.current?.click()}
+                  >
                     {genPhotoPreview ? "Change Photo" : "Upload Photo"}
                   </Button>
                   {genPhotoPreview && (
                     <div className="flex justify-center">
-                      <img src={genPhotoPreview} alt="Preview" className="w-24 h-24 rounded-lg object-cover" />
+                      <img
+                        src={genPhotoPreview}
+                        alt="Preview"
+                        className="w-24 h-24 rounded-lg object-cover"
+                      />
                     </div>
                   )}
                 </div>
@@ -373,16 +917,19 @@ const AdminEntries = () => {
                       <span className="w-4 h-4 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
                       Generating…
                     </span>
-                  ) : "Generate ID Card"}
+                  ) : (
+                    "Generate ID Card"
+                  )}
                 </Button>
               </Card>
             </div>
           ) : (
-            /* Generated card preview */
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row gap-6 justify-center items-center">
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground text-center font-semibold uppercase">Front</p>
+                  <p className="text-xs text-muted-foreground text-center font-semibold uppercase">
+                    Front
+                  </p>
                   <div className="shadow-elevated rounded-lg overflow-hidden" style={{ width: 350 }}>
                     <IDCardFront
                       ref={frontRef}
@@ -395,14 +942,20 @@ const AdminEntries = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground text-center font-semibold uppercase">Back</p>
+                  <p className="text-xs text-muted-foreground text-center font-semibold uppercase">
+                    Back
+                  </p>
                   <div className="shadow-elevated rounded-lg overflow-hidden" style={{ width: 350 }}>
                     <IDCardBack ref={backRef} company={generatedCard.company as CompanyTemplate} />
                   </div>
                 </div>
               </div>
               <div className="flex gap-3 justify-center">
-                <Button onClick={handleAdminDownload} disabled={downloading} className="bg-accent text-accent-foreground hover:bg-accent/90">
+                <Button
+                  onClick={handleAdminDownload}
+                  disabled={downloading}
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
+                >
                   {downloading ? (
                     <span className="flex items-center gap-2">
                       <span className="w-4 h-4 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
@@ -414,7 +967,15 @@ const AdminEntries = () => {
                     </span>
                   )}
                 </Button>
-                <Button variant="outline" onClick={() => { setGeneratedCard(null); setGenPhoto(null); setGenPhotoPreview(null); setSelectedStaff(null); }}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setGeneratedCard(null);
+                    setGenPhoto(null);
+                    setGenPhotoPreview(null);
+                    setSelectedStaff(null);
+                  }}
+                >
                   Generate Another
                 </Button>
               </div>

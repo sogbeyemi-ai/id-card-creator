@@ -56,28 +56,39 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
 
   const lookup = useStaffNameLookup(formData.fullName);
 
-  // Auto-fill role-department when a verified record is found
+  // Auto-fill role-department when a verified record is found.
+  // Always populates the field on a match (overrides previous auto-fills),
+  // unless the user has manually edited the role-department for the current name.
   useEffect(() => {
-    if (lookup.status !== "found" || !lookup.match) {
-      if (lookup.status === "not_found" || lookup.status === "idle") {
-        setAutoFilled(false);
-        setDepartmentMissing(false);
-      }
+    if (lookup.status === "idle" || lookup.status === "not_found") {
+      setAutoFilled(false);
+      setDepartmentMissing(false);
       return;
     }
+    if (lookup.status !== "found" || !lookup.match) return;
     if (roleDeptManuallyEdited) return;
 
     const role = (lookup.match.role || "").trim().toUpperCase();
     const dept = (lookup.match.department || "").trim().toUpperCase();
 
     if (role && dept) {
-      setFormData((prev) => ({ ...prev, roleDepartment: `${role}-${dept}` }));
+      setFormData((prev) =>
+        prev.roleDepartment === `${role}-${dept}` ? prev : { ...prev, roleDepartment: `${role}-${dept}` }
+      );
       setAutoFilled(true);
       setDepartmentMissing(false);
     } else if (role && !dept) {
-      setFormData((prev) => ({ ...prev, roleDepartment: `${role}-` }));
+      setFormData((prev) =>
+        prev.roleDepartment === `${role}-` ? prev : { ...prev, roleDepartment: `${role}-` }
+      );
       setAutoFilled(true);
       setDepartmentMissing(true);
+    } else if (dept && !role) {
+      setFormData((prev) =>
+        prev.roleDepartment === `-${dept}` ? prev : { ...prev, roleDepartment: `-${dept}` }
+      );
+      setAutoFilled(true);
+      setDepartmentMissing(false);
     } else {
       setAutoFilled(false);
       setDepartmentMissing(false);

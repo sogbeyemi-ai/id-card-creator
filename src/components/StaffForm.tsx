@@ -1,10 +1,11 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, User, Briefcase, Image, MapPin, Camera, X, SwitchCamera } from "lucide-react";
+import { Upload, User, Briefcase, Image, MapPin, Camera, X, SwitchCamera, CheckCircle2, Loader2 } from "lucide-react";
 import Webcam from "react-webcam";
+import { useStaffNameLookup } from "@/hooks/useStaffNameLookup";
 
 export type CompanyTemplate = "SOTI" | "OPAY" | "Blue Ridge";
 
@@ -49,6 +50,40 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [autoFilled, setAutoFilled] = useState(false);
+  const [departmentMissing, setDepartmentMissing] = useState(false);
+  const [roleDeptManuallyEdited, setRoleDeptManuallyEdited] = useState(false);
+
+  const lookup = useStaffNameLookup(formData.fullName);
+
+  // Auto-fill role-department when a verified record is found
+  useEffect(() => {
+    if (lookup.status !== "found" || !lookup.match) {
+      if (lookup.status === "not_found" || lookup.status === "idle") {
+        setAutoFilled(false);
+        setDepartmentMissing(false);
+      }
+      return;
+    }
+    if (roleDeptManuallyEdited) return;
+
+    const role = (lookup.match.role || "").trim().toUpperCase();
+    const dept = (lookup.match.department || "").trim().toUpperCase();
+
+    if (role && dept) {
+      setFormData((prev) => ({ ...prev, roleDepartment: `${role}-${dept}` }));
+      setAutoFilled(true);
+      setDepartmentMissing(false);
+    } else if (role && !dept) {
+      setFormData((prev) => ({ ...prev, roleDepartment: `${role}-` }));
+      setAutoFilled(true);
+      setDepartmentMissing(true);
+    } else {
+      setAutoFilled(false);
+      setDepartmentMissing(false);
+    }
+    setFormError(null);
+  }, [lookup.status, lookup.match, roleDeptManuallyEdited]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -114,8 +149,15 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
       setFormError("Please enter your full name");
       return;
     }
-    if (!formData.roleDepartment.trim()) {
+    const rd = formData.roleDepartment.trim();
+    if (!rd) {
       setFormError("Please enter your role and department");
+      return;
+    }
+    // If auto-filled with missing department, ensure user appended a department after the dash
+    const parts = rd.split("-").map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) {
+      setFormError("Please enter your department after the role (format: ROLE-DEPARTMENT)");
       return;
     }
     if (!formData.state) {
@@ -216,31 +258,63 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
           <Label htmlFor="fullName" className="flex items-center gap-2 text-sm font-medium">
             <User className="w-4 h-4 text-accent" />
             Full Name <span className="text-destructive">*</span>
+            {lookup.status === "searching" && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground font-normal">
+                <Loader2 className="w-3 h-3 animate-spin" /> Verifying records…
+              </span>
+            )}
+            {lookup.status === "found" && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
+                <CheckCircle2 className="w-3 h-3" /> Verified
+              </span>
+            )}
           </Label>
           <Input
             id="fullName"
             placeholder="Enter full name"
             value={formData.fullName}
-            onChange={(e) => { setFormData((prev) => ({ ...prev, fullName: e.target.value.toUpperCase() })); setFormError(null); }}
+            onChange={(e) => {
+              setFormData((prev) => ({ ...prev, fullName: e.target.value.toUpperCase() }));
+              setFormError(null);
+              setRoleDeptManuallyEdited(false);
+            }}
             required
             className="uppercase"
           />
+          {lookup.status === "not_found" && formData.fullName.trim().split(/\s+/).filter(Boolean).length >= 2 && (
+            <p className="text-xs text-destructive">No matching record found. Check spelling or contact admin.</p>
+          )}
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="roleDepartment" className="flex items-center gap-2 text-sm font-medium">
             <Briefcase className="w-4 h-4 text-accent" />
             Role - Department <span className="text-destructive">*</span>
+            {autoFilled && !departmentMissing && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
+                <CheckCircle2 className="w-3 h-3" /> Auto-filled
+              </span>
+            )}
           </Label>
           <Input
             id="roleDepartment"
             placeholder="e.g. BD-CARDLESS PAYMENT BUSINESS"
             value={formData.roleDepartment}
-            onChange={(e) => { setFormData((prev) => ({ ...prev, roleDepartment: e.target.value.toUpperCase() })); setFormError(null); }}
+            onChange={(e) => {
+              setFormData((prev) => ({ ...prev, roleDepartment: e.target.value.toUpperCase() }));
+              setFormError(null);
+              setRoleDeptManuallyEdited(true);
+            }}
             required
             className="uppercase"
           />
-          <p className="text-xs text-muted-foreground">Format: ROLE-DEPARTMENT (e.g. BD-OFFLINE OPERATION)</p>
+          {departmentMissing ? (
+            <p className="text-xs text-accent font-medium">
+              Please enter your department after the role (format: ROLE-DEPARTMENT)
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">Format: ROLE-DEPARTMENT (e.g. BD-OFFLINE OPERATION)</p>
+          )}
         </div>
 
         <div className="space-y-2">

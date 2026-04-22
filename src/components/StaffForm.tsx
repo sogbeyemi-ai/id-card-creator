@@ -50,6 +50,40 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [autoFilled, setAutoFilled] = useState(false);
+  const [departmentMissing, setDepartmentMissing] = useState(false);
+  const [roleDeptManuallyEdited, setRoleDeptManuallyEdited] = useState(false);
+
+  const lookup = useStaffNameLookup(formData.fullName);
+
+  // Auto-fill role-department when a verified record is found
+  useEffect(() => {
+    if (lookup.status !== "found" || !lookup.match) {
+      if (lookup.status === "not_found" || lookup.status === "idle") {
+        setAutoFilled(false);
+        setDepartmentMissing(false);
+      }
+      return;
+    }
+    if (roleDeptManuallyEdited) return;
+
+    const role = (lookup.match.role || "").trim().toUpperCase();
+    const dept = (lookup.match.department || "").trim().toUpperCase();
+
+    if (role && dept) {
+      setFormData((prev) => ({ ...prev, roleDepartment: `${role}-${dept}` }));
+      setAutoFilled(true);
+      setDepartmentMissing(false);
+    } else if (role && !dept) {
+      setFormData((prev) => ({ ...prev, roleDepartment: `${role}-` }));
+      setAutoFilled(true);
+      setDepartmentMissing(true);
+    } else {
+      setAutoFilled(false);
+      setDepartmentMissing(false);
+    }
+    setFormError(null);
+  }, [lookup.status, lookup.match, roleDeptManuallyEdited]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

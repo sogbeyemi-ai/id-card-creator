@@ -1,10 +1,11 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, User, Briefcase, Image, MapPin, Camera, X, SwitchCamera } from "lucide-react";
+import { Upload, User, Briefcase, Image, MapPin, Camera, X, SwitchCamera, CheckCircle2, Loader2 } from "lucide-react";
 import Webcam from "react-webcam";
+import { useStaffNameLookup } from "@/hooks/useStaffNameLookup";
 
 export type CompanyTemplate = "SOTI" | "OPAY" | "Blue Ridge";
 

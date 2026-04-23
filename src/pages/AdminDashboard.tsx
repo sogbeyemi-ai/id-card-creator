@@ -1,13 +1,42 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
-import { Shield, CreditCard, Download, TrendingUp } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Shield, CreditCard, Download, TrendingUp, FileSpreadsheet, Filter, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from "recharts";
+import { toast } from "sonner";
+import * as XLSX from "xlsx";
+
+interface DownloadEntry {
+  id: string;
+  full_name: string;
+  role: string;
+  department: string;
+  state: string | null;
+  created_at: string;
+  downloaded_at: string | null;
+  download_count: number;
+}
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState({ verifiedStaff: 0, generatedIds: 0, downloads: 0 });
   const [loading, setLoading] = useState(true);
   const [activityData, setActivityData] = useState<{ date: string; ids: number; downloads: number }[]>([]);
+
+  // Download report data
+  const [downloadEntries, setDownloadEntries] = useState<DownloadEntry[]>([]);
+  const [reportLoading, setReportLoading] = useState(true);
+
+  // Filters for the report section
+  const [nameFilter, setNameFilter] = useState("");
+  const [cityFilter, setCityFilter] = useState("all");
+  const [roleDeptFilter, setRoleDeptFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -24,7 +53,6 @@ const AdminDashboard = () => {
           downloads: downloads.count || 0,
         });
 
-        // Fetch activity data for charts (last 14 days)
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
         const dateStr = fourteenDaysAgo.toISOString();
@@ -34,7 +62,6 @@ const AdminDashboard = () => {
           supabase.from("download_logs").select("downloaded_at").gte("downloaded_at", dateStr),
         ]);
 
-        // Group by date
         const dateMap: Record<string, { ids: number; downloads: number }> = {};
         for (let i = 0; i < 14; i++) {
           const d = new Date();
@@ -65,8 +92,121 @@ const AdminDashboard = () => {
         setLoading(false);
       }
     };
+
+    const fetchDownloadEntries = async () => {
+      setReportLoading(true);
+      try {
+        const pageSize = 1000;
+        let from = 0;
+        const all: DownloadEntry[] = [];
+        while (true) {
+          const { data, error } = await supabase
+            .from("staff_entries")
+            .select("id, full_name, role, department, state, created_at, downloaded_at, download_count")
+            .order("created_at", { ascending: false })
+            .range(from, from + pageSize - 1);
+          if (error) break;
+          const batch = (data as DownloadEntry[]) || [];
+          all.push(...batch);
+          if (batch.length < pageSize) break;
+          from += pageSize;
+        }
+        setDownloadEntries(all);
+      } catch {
+        // silent
+      } finally {
+        setReportLoading(false);
+      }
+    };
+
     fetchStats();
+    fetchDownloadEntries();
   }, []);
+
+  const cityOptions = useMemo(() => {
+    const set = new Set<string>();
+    downloadEntries.forEach((e) => {
+      if (e.state) set.add(e.state.trim());
+    });
+    return Array.from(set).sort();
+  }, [downloadEntries]);
+
+  const roleDeptOptions = useMemo(() => {
+    const set = new Set<string>();
+    downloadEntries.forEach((e) => {
+      const rd = [e.role, e.department].filter(Boolean).join("-");
+      if (rd) set.add(rd);
+    });
+    return Array.from(set).sort();
+  }, [downloadEntries]);
+
+  const filteredReport = useMemo(() => {
+    const q = nameFilter.toLowerCase().trim();
+    const fromTs = dateFrom ? new Date(dateFrom + "T00:00:00").getTime() : null;
+    const toTs = dateTo ? new Date(dateTo + "T23:59:59.999").getTime() : null;
+    return downloadEntries.filter((e) => {
+      const rd = [e.role, e.department].filter(Boolean).join("-");
+      if (q && !e.full_name.toLowerCase().includes(q)) return false;
+      if (cityFilter !== "all" && (e.state || "").trim() !== cityFilter) return false;
+      if (roleDeptFilter !== "all" && rd !== roleDeptFilter) return false;
+      if (fromTs !== null || toTs !== null) {
+        const raw = e.downloaded_at || e.created_at;
+        const ts = new Date(raw).getTime();
+        if (fromTs !== null && ts < fromTs) return false;
+        if (toTs !== null && ts > toTs) return false;
+      }
+      return true;
+    });
+  }, [downloadEntries, nameFilter, cityFilter, roleDeptFilter, dateFrom, dateTo]);
+
+  const reportStats = useMemo(() => {
+    const downloaded = filteredReport.filter((e) => e.download_count > 0 || e.downloaded_at);
+    const totalDownloaded = downloaded.length;
+    const downloadedByCity: Record<string, number> = {};
+    const downloadedByRoleDept: Record<string, number> = {};
+    downloaded.forEach((e) => {
+      const city = (e.state || "Unknown").trim();
+      downloadedByCity[city] = (downloadedByCity[city] || 0) + 1;
+      const rd = [e.role, e.department].filter(Boolean).join("-") || "Unknown";
+      downloadedByRoleDept[rd] = (downloadedByRoleDept[rd] || 0) + 1;
+    });
+    return { totalDownloaded, downloadedByCity, downloadedByRoleDept, totalInScope: filteredReport.length };
+  }, [filteredReport]);
+
+  const clearReportFilters = () => {
+    setNameFilter("");
+    setCityFilter("all");
+    setRoleDeptFilter("all");
+    setDateFrom("");
+    setDateTo("");
+  };
+
+  const exportToExcel = async () => {
+    if (filteredReport.length === 0) {
+      toast.error("No records to export");
+      return;
+    }
+    setExporting(true);
+    try {
+      const rows = filteredReport.map((e) => ({
+        "Full Name": e.full_name,
+        Role: e.role,
+        Department: e.department || "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [{ wch: 32 }, { wch: 24 }, { wch: 24 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Staff Records");
+      const stamp = new Date().toISOString().slice(0, 10);
+      const cityTag = cityFilter !== "all" ? `_${cityFilter.replace(/[^a-zA-Z0-9]+/g, "_")}` : "";
+      XLSX.writeFile(wb, `staff_report${cityTag}_${stamp}.xlsx`);
+      toast.success(`Exported ${rows.length} records`);
+    } catch (err: any) {
+      toast.error(err?.message || "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const cards = [
     { label: "Verified Staff", value: stats.verifiedStaff, icon: Shield, color: "text-accent" },
@@ -81,6 +221,13 @@ const AdminDashboard = () => {
       </div>
     );
   }
+
+  const topCities = Object.entries(reportStats.downloadedByCity)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+  const topRoleDepts = Object.entries(reportStats.downloadedByRoleDept)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
 
   return (
     <div className="space-y-8">
@@ -137,6 +284,141 @@ const AdminDashboard = () => {
           </ResponsiveContainer>
         </Card>
       </div>
+
+      {/* Download Reports Section */}
+      <Card className="p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-accent" />
+              Download Reports
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Filter staff records and export name, role, and department to Excel.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={clearReportFilters}>
+              <X className="w-3 h-3 mr-1" /> Clear
+            </Button>
+            <Button
+              size="sm"
+              onClick={exportToExcel}
+              disabled={exporting || filteredReport.length === 0}
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+              {exporting ? (
+                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" />
+              ) : (
+                <FileSpreadsheet className="w-3 h-3 mr-1" />
+              )}
+              Export Excel
+            </Button>
+          </div>
+        </div>
+
+        {/* Filters grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs flex items-center gap-1">
+              <Filter className="w-3 h-3" /> Name
+            </Label>
+            <Input
+              placeholder="Search by name…"
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">City / State</Label>
+            <Select value={cityFilter} onValueChange={setCityFilter}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All cities</SelectItem>
+                {cityOptions.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Role-Department</Label>
+            <Select value={roleDeptFilter} onValueChange={setRoleDeptFilter}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All roles</SelectItem>
+                {roleDeptOptions.map((rd) => (
+                  <SelectItem key={rd} value={rd}>{rd}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Date From</Label>
+            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Date To</Label>
+            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9" />
+          </div>
+        </div>
+
+        {/* Summary stats */}
+        {reportLoading ? (
+          <p className="text-sm text-muted-foreground text-center py-4">Loading…</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="bg-muted/50 rounded-lg p-4">
+              <p className="text-xs text-muted-foreground">In current filter</p>
+              <p className="text-2xl font-bold">{reportStats.totalInScope}</p>
+              <p className="text-xs text-muted-foreground mt-1">staff records</p>
+            </div>
+            <div className="bg-accent/10 rounded-lg p-4">
+              <p className="text-xs text-muted-foreground">Downloaded their ID</p>
+              <p className="text-2xl font-bold text-accent">{reportStats.totalDownloaded}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {reportStats.totalInScope > 0
+                  ? `${Math.round((reportStats.totalDownloaded / reportStats.totalInScope) * 100)}% download rate`
+                  : "—"}
+              </p>
+            </div>
+            <div className="bg-muted/50 rounded-lg p-4">
+              <p className="text-xs text-muted-foreground">Pending download</p>
+              <p className="text-2xl font-bold">{reportStats.totalInScope - reportStats.totalDownloaded}</p>
+              <p className="text-xs text-muted-foreground mt-1">have not downloaded</p>
+            </div>
+          </div>
+        )}
+
+        {/* Breakdown lists */}
+        {!reportLoading && reportStats.totalDownloaded > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Top cities (downloaded)</p>
+              <div className="space-y-1">
+                {topCities.map(([city, count]) => (
+                  <div key={city} className="flex items-center justify-between text-sm bg-muted/30 rounded px-3 py-1.5">
+                    <span className="truncate">{city}</span>
+                    <span className="font-semibold text-accent">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Top role-departments (downloaded)</p>
+              <div className="space-y-1">
+                {topRoleDepts.map(([rd, count]) => (
+                  <div key={rd} className="flex items-center justify-between text-sm bg-muted/30 rounded px-3 py-1.5">
+                    <span className="truncate">{rd}</span>
+                    <span className="font-semibold text-accent">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
     </div>
   );
 };

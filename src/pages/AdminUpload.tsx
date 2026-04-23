@@ -57,6 +57,17 @@ const AdminUpload = () => {
   const [editData, setEditData] = useState<Partial<StaffRecord>>({});
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Manual add new staff to batch
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addData, setAddData] = useState<Omit<StaffRecord, "id">>({
+    full_name: "",
+    role: "",
+    department: "",
+    state: "",
+    company: "",
+  });
+  const [savingAdd, setSavingAdd] = useState(false);
+
   const fetchAllFromTable = async (select: string, filter?: { col: string; val: string }) => {
     let all: any[] = [];
     let from = 0;
@@ -123,6 +134,55 @@ const AdminUpload = () => {
       setSearchTerm("");
     }
     setEditingId(null);
+    setShowAddForm(false);
+    setAddData({ full_name: "", role: "", department: "", state: "", company: "" });
+  };
+
+  const handleAddRecord = async (batchId: string) => {
+    const fullName = addData.full_name.trim();
+    const role = addData.role.trim();
+    const department = (addData.department || "").trim();
+    const state = (addData.state || "").trim();
+    const company = (addData.company || "").trim();
+
+    if (!fullName || !role || !department || !state) {
+      toast.error("Full name, role, department, and state are required");
+      return;
+    }
+
+    setSavingAdd(true);
+    try {
+      const { data, error } = await supabase
+        .from("verified_staff")
+        .insert({
+          full_name: fullName.toUpperCase(),
+          role: role.toUpperCase(),
+          department: department.toUpperCase(),
+          state: state.toUpperCase(),
+          company: company ? company.toUpperCase() : null,
+          batch_id: batchId,
+        })
+        .select("id, full_name, role, department, state, company")
+        .single();
+      if (error) throw error;
+
+      // Instantly add to current view
+      setBatchRecords((prev) => [data as StaffRecord, ...prev]);
+      // Bump record count on the batch list
+      setBatches((prev) =>
+        prev.map((b) =>
+          b.batch_id === batchId ? { ...b, record_count: b.record_count + 1 } : b
+        )
+      );
+      setAddData({ full_name: "", role: "", department: "", state: "", company: "" });
+      setShowAddForm(false);
+      invalidateVerifiedStaffCache();
+      toast.success("Staff record added to batch");
+    } catch (err: any) {
+      toast.error("Failed to add: " + err.message);
+    } finally {
+      setSavingAdd(false);
+    }
   };
 
   const startEdit = (record: StaffRecord) => {
@@ -341,16 +401,61 @@ const AdminUpload = () => {
                     <p className="text-sm text-muted-foreground text-center py-4">Loading records…</p>
                   ) : (
                     <>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Search className="w-4 h-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search records…"
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                        <p className="text-xs text-muted-foreground whitespace-nowrap">{filteredRecords.length} records</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2 flex-1">
+                          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <Input
+                            placeholder="Search records…"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-muted-foreground whitespace-nowrap">{filteredRecords.length} records</p>
+                          <Button
+                            size="sm"
+                            variant={showAddForm ? "outline" : "default"}
+                            className={showAddForm ? "" : "bg-accent text-accent-foreground hover:bg-accent/90"}
+                            onClick={() => setShowAddForm((s) => !s)}
+                          >
+                            {showAddForm ? <><X className="w-3 h-3 mr-1" /> Cancel</> : <><Plus className="w-3 h-3 mr-1" /> Add Staff</>}
+                          </Button>
+                        </div>
                       </div>
+
+                      {showAddForm && (
+                        <div className="bg-accent/5 border border-accent/30 rounded-lg p-3 mb-3 space-y-2">
+                          <p className="text-xs font-semibold flex items-center gap-1">
+                            <Plus className="w-3 h-3" /> Add new staff to this batch
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                            <Input placeholder="Full name *" value={addData.full_name} onChange={(e) => setAddData((d) => ({ ...d, full_name: e.target.value }))} className="h-8 text-xs" />
+                            <Input placeholder="Role *" value={addData.role} onChange={(e) => setAddData((d) => ({ ...d, role: e.target.value }))} className="h-8 text-xs" />
+                            <Input placeholder="Department *" value={addData.department || ""} onChange={(e) => setAddData((d) => ({ ...d, department: e.target.value }))} className="h-8 text-xs" />
+                            <Input placeholder="State *" value={addData.state || ""} onChange={(e) => setAddData((d) => ({ ...d, state: e.target.value }))} className="h-8 text-xs" />
+                            <Input placeholder="Company (optional)" value={addData.company || ""} onChange={(e) => setAddData((d) => ({ ...d, company: e.target.value }))} className="h-8 text-xs" />
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              size="sm"
+                              onClick={() => handleAddRecord(batch.batch_id)}
+                              disabled={savingAdd}
+                              className="bg-accent text-accent-foreground hover:bg-accent/90"
+                            >
+                              {savingAdd ? (
+                                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" />
+                              ) : (
+                                <Save className="w-3 h-3 mr-1" />
+                              )}
+                              Save
+                            </Button>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            Existing uploaded records are not affected. New entry appears at the top of this batch's list.
+                          </p>
+                        </div>
+                      )}
                       <div className="max-h-96 overflow-auto">
                         <Table>
                           <TableHeader>

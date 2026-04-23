@@ -290,9 +290,19 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
                 <Loader2 className="w-3 h-3 animate-spin" /> Verifying records…
               </span>
             )}
-            {lookup.status === "found" && (
+            {lookup.status === "found" && lookup.confidence === "exact" && (
               <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
-                <CheckCircle2 className="w-3 h-3" /> Verified
+                <CheckCircle2 className="w-3 h-3" /> Verified · Exact match
+              </span>
+            )}
+            {lookup.status === "found" && lookup.confidence === "high" && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
+                <CheckCircle2 className="w-3 h-3" /> Verified · High confidence
+              </span>
+            )}
+            {lookup.status === "ambiguous" && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+                ⚠ Possible matches — please confirm
               </span>
             )}
           </Label>
@@ -304,6 +314,8 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
               setFormData((prev) => ({ ...prev, fullName: e.target.value.toUpperCase() }));
               setFormError(null);
               setRoleDeptManuallyEdited(false);
+              setChosenStaffId(null);
+              setShowPicker(false);
             }}
             required
             className="uppercase"
@@ -317,9 +329,19 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
           <Label htmlFor="roleDepartment" className="flex items-center gap-2 text-sm font-medium">
             <Briefcase className="w-4 h-4 text-accent" />
             Role - Department <span className="text-destructive">*</span>
-            {autoFilled && !departmentMissing && (
+            {autoFilled && !departmentMissing && lookup.confidence === "exact" && (
               <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
-                <CheckCircle2 className="w-3 h-3" /> Auto-filled
+                <CheckCircle2 className="w-3 h-3" /> Auto-filled · Exact
+              </span>
+            )}
+            {autoFilled && !departmentMissing && lookup.confidence === "high" && !isAmbiguous && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
+                <CheckCircle2 className="w-3 h-3" /> Auto-filled · High confidence
+              </span>
+            )}
+            {isAmbiguous && (
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+                ⚠ Low confidence — please confirm
               </span>
             )}
           </Label>
@@ -328,18 +350,18 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
             placeholder="e.g. BD-CARDLESS PAYMENT BUSINESS"
             value={formData.roleDepartment}
             onChange={(e) => {
-              if (autoFilled && !departmentMissing) return;
+              if (lockRoleDept) return;
               setFormData((prev) => ({ ...prev, roleDepartment: e.target.value.toUpperCase() }));
               setFormError(null);
               setRoleDeptManuallyEdited(true);
             }}
             required
-            readOnly={autoFilled && !departmentMissing}
-            aria-readonly={autoFilled && !departmentMissing}
-            tabIndex={autoFilled && !departmentMissing ? -1 : 0}
-            className={`uppercase ${autoFilled && !departmentMissing ? "bg-muted cursor-not-allowed text-muted-foreground" : ""}`}
+            readOnly={lockRoleDept}
+            aria-readonly={lockRoleDept}
+            tabIndex={lockRoleDept ? -1 : 0}
+            className={`uppercase ${lockRoleDept ? "bg-muted cursor-not-allowed text-muted-foreground" : ""}`}
           />
-          {autoFilled && !departmentMissing ? (
+          {lockRoleDept ? (
             <p className="text-xs text-muted-foreground">
               Auto-filled from verified records. This field is locked. Contact admin if incorrect.
             </p>
@@ -347,8 +369,62 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
             <p className="text-xs text-accent font-medium">
               Please enter your department after the role (format: ROLE-DEPARTMENT)
             </p>
+          ) : isAmbiguous ? (
+            <p className="text-xs text-amber-600">
+              We found more than one possible match for this name. Please confirm the correct staff record below.
+            </p>
           ) : (
             <p className="text-xs text-muted-foreground">Format: ROLE-DEPARTMENT (e.g. BD-OFFLINE OPERATION)</p>
+          )}
+
+          {/* Disambiguation picker */}
+          {isAmbiguous && lookup.candidates.length > 0 && (
+            <div className="mt-2 rounded-lg border border-amber-300/50 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  Confirm correct staff record
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowPicker((s) => !s)}
+                  className="text-xs text-accent hover:underline"
+                >
+                  {showPicker ? "Hide options" : `Show ${lookup.candidates.length} possible match${lookup.candidates.length > 1 ? "es" : ""}`}
+                </button>
+              </div>
+              {showPicker && (
+                <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                  {lookup.candidates.map((c) => {
+                    const isChosen = chosenStaffId === c.record.id ||
+                      (!chosenStaffId && lookup.match?.id === c.record.id);
+                    return (
+                      <button
+                        key={c.record.id}
+                        type="button"
+                        onClick={() => {
+                          setChosenStaffId(c.record.id);
+                          setRoleDeptManuallyEdited(false);
+                          setShowPicker(false);
+                        }}
+                        className={`w-full text-left rounded-md border p-2 text-xs transition-colors ${
+                          isChosen
+                            ? "border-accent bg-accent/10"
+                            : "border-border bg-background hover:border-accent/50"
+                        }`}
+                      >
+                        <div className="font-semibold uppercase">{c.record.full_name}</div>
+                        <div className="text-muted-foreground">
+                          {(c.record.role || "—").toUpperCase()} · {(c.record.department || "—").toUpperCase()}
+                        </div>
+                      </button>
+                    );
+                  })}
+                  <p className="text-[11px] text-muted-foreground pt-1">
+                    None of these is you? Edit the role-department field manually or contact admin.
+                  </p>
+                </div>
+              )}
+            </div>
           )}
         </div>
 

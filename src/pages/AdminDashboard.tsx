@@ -93,25 +93,110 @@ const AdminDashboard = () => {
       }
     };
 
+    const fetchAllPaged = async <T,>(
+      table: "verified_staff" | "staff_entries",
+      columns: string
+    ): Promise<T[]> => {
+      const pageSize = 1000;
+      let from = 0;
+      const all: T[] = [];
+      while (true) {
+        const { data, error } = await supabase
+          .from(table)
+          .select(columns)
+          .range(from, from + pageSize - 1);
+        if (error) break;
+        const batch = (data as unknown as T[]) || [];
+        all.push(...batch);
+        if (batch.length < pageSize) break;
+        from += pageSize;
+      }
+      return all;
+    };
+
     const fetchDownloadEntries = async () => {
       setReportLoading(true);
       try {
-        const pageSize = 1000;
-        let from = 0;
-        const all: DownloadEntry[] = [];
-        while (true) {
-          const { data, error } = await supabase
-            .from("staff_entries")
-            .select("id, full_name, role, department, state, created_at, downloaded_at, download_count")
-            .order("created_at", { ascending: false })
-            .range(from, from + pageSize - 1);
-          if (error) break;
-          const batch = (data as DownloadEntry[]) || [];
-          all.push(...batch);
-          if (batch.length < pageSize) break;
-          from += pageSize;
-        }
-        setDownloadEntries(all);
+        // Pull the FULL uploaded staff list (verified_staff) so the report is
+        // never blank just because nobody has generated an ID yet. Then merge
+        // download status from staff_entries by matching full_name.
+        const [verified, generated] = await Promise.all([
+          fetchAllPaged<{
+            id: string;
+            full_name: string;
+            role: string | null;
+            department: string | null;
+            state: string | null;
+            created_at: string;
+          }>("verified_staff", "id, full_name, role, department, state, created_at"),
+          fetchAllPaged<{
+            full_name: string;
+            state: string | null;
+            created_at: string;
+            downloaded_at: string | null;
+            download_count: number;
+          }>(
+            "staff_entries",
+            "full_name, state, created_at, downloaded_at, download_count"
+          ),
+        ]);
+
+        // Index generated entries by normalized name for quick merge
+        const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+        const genMap = new Map<
+          string,
+          { downloaded_at: string | null; download_count: number; created_at: string; state: string | null }
+        >();
+        generated.forEach((g) => {
+          const key = norm(g.full_name);
+          const existing = genMap.get(key);
+          if (
+            !existing ||
+            (g.downloaded_at && (!existing.downloaded_at || g.downloaded_at > existing.downloaded_at))
+          ) {
+            genMap.set(key, {
+              downloaded_at: g.downloaded_at,
+              download_count: g.download_count || 0,
+              created_at: g.created_at,
+              state: g.state,
+            });
+          }
+        });
+
+        const merged: DownloadEntry[] = verified.map((v) => {
+          const g = genMap.get(norm(v.full_name));
+          return {
+            id: v.id,
+            full_name: v.full_name,
+            role: v.role || "",
+            department: v.department || "",
+            state: v.state || g?.state || null,
+            created_at: g?.created_at || v.created_at,
+            downloaded_at: g?.downloaded_at || null,
+            download_count: g?.download_count || 0,
+          };
+        });
+
+        // Include any generated entries that don't match a verified record
+        // (manually generated walk-ins) so admin still sees them.
+        const verifiedKeys = new Set(verified.map((v) => norm(v.full_name)));
+        generated.forEach((g) => {
+          if (!verifiedKeys.has(norm(g.full_name))) {
+            merged.push({
+              id: `gen-${g.full_name}-${g.created_at}`,
+              full_name: g.full_name,
+              role: "",
+              department: "",
+              state: g.state,
+              created_at: g.created_at,
+              downloaded_at: g.downloaded_at,
+              download_count: g.download_count || 0,
+            });
+          }
+        });
+
+        merged.sort((a, b) => (a.full_name > b.full_name ? 1 : -1));
+        setDownloadEntries(merged);
       } catch {
         // silent
       } finally {

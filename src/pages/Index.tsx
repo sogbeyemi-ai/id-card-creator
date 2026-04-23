@@ -126,7 +126,7 @@ const Index = () => {
 
     if (entry?.download_locked || (entry?.download_count && entry.download_count > 0)) {
       setGeneratedCard((prev) => prev ? { ...prev, downloadLocked: true } : prev);
-      toast.error("Download already completed. Contact admin.");
+      toast.error("Download locked. Admin approval required to download again.");
       return;
     }
 
@@ -150,7 +150,7 @@ const Index = () => {
         .eq("id", generatedCard.id);
 
       setGeneratedCard((prev) => prev ? { ...prev, downloadLocked: true } : prev);
-      toast.success("PDF downloaded! This was your one-time download.");
+      toast.success("PDF downloaded! Download is now locked. Contact admin if you need to re-download.");
     } catch (error: any) {
       toast.error("Failed to download PDF: " + error.message);
     } finally {
@@ -217,7 +217,7 @@ const Index = () => {
                 {generatedCard.downloadLocked ? (
                   <div className="bg-muted rounded-lg p-4 text-center">
                     <p className="font-medium text-sm text-muted-foreground">
-                      Download already completed. Contact admin to re-enable.
+                      🔒 Download locked. Contact admin to approve a re-download.
                     </p>
                   </div>
                 ) : (

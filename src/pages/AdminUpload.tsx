@@ -57,6 +57,17 @@ const AdminUpload = () => {
   const [editData, setEditData] = useState<Partial<StaffRecord>>({});
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Manual add new staff to batch
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addData, setAddData] = useState<Omit<StaffRecord, "id">>({
+    full_name: "",
+    role: "",
+    department: "",
+    state: "",
+    company: "",
+  });
+  const [savingAdd, setSavingAdd] = useState(false);
+
   const fetchAllFromTable = async (select: string, filter?: { col: string; val: string }) => {
     let all: any[] = [];
     let from = 0;

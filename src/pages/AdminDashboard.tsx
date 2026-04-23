@@ -268,6 +268,7 @@ const AdminDashboard = () => {
     setNameFilter("");
     setCityFilter("all");
     setRoleDeptFilter("all");
+    setStatusFilter("all");
     setDateFrom("");
     setDateTo("");
   };

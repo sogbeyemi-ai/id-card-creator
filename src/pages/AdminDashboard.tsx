@@ -232,9 +232,14 @@ const AdminDashboard = () => {
     const toTs = dateTo ? new Date(dateTo + "T23:59:59.999").getTime() : null;
     return downloadEntries.filter((e) => {
       const rd = [e.role, e.department].filter(Boolean).join("-");
+      const hasDownloaded = e.download_count > 0 || !!e.downloaded_at;
+      const hasGenerated = !!e.downloaded_at || e.download_count > 0 || (e.id?.startsWith("gen-") ?? false);
       if (q && !e.full_name.toLowerCase().includes(q)) return false;
       if (cityFilter !== "all" && (e.state || "").trim() !== cityFilter) return false;
       if (roleDeptFilter !== "all" && rd !== roleDeptFilter) return false;
+      if (statusFilter === "downloaded" && !hasDownloaded) return false;
+      if (statusFilter === "generated" && !hasGenerated) return false;
+      if (statusFilter === "pending" && hasDownloaded) return false;
       if (fromTs !== null || toTs !== null) {
         const raw = e.downloaded_at || e.created_at;
         const ts = new Date(raw).getTime();
@@ -243,7 +248,7 @@ const AdminDashboard = () => {
       }
       return true;
     });
-  }, [downloadEntries, nameFilter, cityFilter, roleDeptFilter, dateFrom, dateTo]);
+  }, [downloadEntries, nameFilter, cityFilter, roleDeptFilter, statusFilter, dateFrom, dateTo]);
 
   const reportStats = useMemo(() => {
     const downloaded = filteredReport.filter((e) => e.download_count > 0 || e.downloaded_at);

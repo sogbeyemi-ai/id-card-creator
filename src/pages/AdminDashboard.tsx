@@ -34,6 +34,7 @@ const AdminDashboard = () => {
   const [nameFilter, setNameFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
   const [roleDeptFilter, setRoleDeptFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "downloaded" | "generated" | "pending">("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [exporting, setExporting] = useState(false);

@@ -447,6 +447,18 @@ const AdminDashboard = () => {
             </Select>
           </div>
           <div className="space-y-1">
+            <Label className="text-xs">Status</Label>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="downloaded">Downloaded</SelectItem>
+                <SelectItem value="generated">Generated</SelectItem>
+                <SelectItem value="pending">Pending (not downloaded)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
             <Label className="text-xs">Date From</Label>
             <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9" />
           </div>

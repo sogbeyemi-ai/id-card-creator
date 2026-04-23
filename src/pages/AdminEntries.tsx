@@ -755,7 +755,7 @@ const AdminEntries = () => {
               <TableBody>
                 {filteredEntries.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                       {loading ? "Filtering records…" : "No entries match the current filters"}
                     </TableCell>
                   </TableRow>
@@ -778,13 +778,18 @@ const AdminEntries = () => {
                         <TableCell>{rd || "—"}</TableCell>
                         <TableCell>{entry.state || "—"}</TableCell>
                         <TableCell>{entry.company}</TableCell>
-                        <TableCell>{entry.download_count}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {formatDateTime(entry.created_at)}
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {formatDateTime(entry.downloaded_at)}
+                        </TableCell>
                         <TableCell>
                           {entry.download_locked ? (
                             <Badge variant="destructive" className="text-xs">
                               Locked
                             </Badge>
-                          ) : entry.download_count > 0 ? (
+                          ) : entry.download_count > 0 || entry.downloaded_at ? (
                             <Badge variant="secondary" className="text-xs">
                               Downloaded
                             </Badge>

@@ -91,6 +91,18 @@ const AdminEntries = () => {
   // Bulk download
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
+  const [bulkStatus, setBulkStatus] = useState<string>("");
+
+  // Saved downloads (persist generated ZIPs in memory for re-download)
+  interface SavedDownload {
+    id: string;
+    name: string;
+    blob: Blob;
+    sizeKb: number;
+    count: number;
+    createdAt: number;
+  }
+  const [savedDownloads, setSavedDownloads] = useState<SavedDownload[]>([]);
 
   // Edit dialog
   const [editEntry, setEditEntry] = useState<StaffEntry | null>(null);

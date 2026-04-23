@@ -187,6 +187,8 @@ const AdminEntries = () => {
 
   const filteredEntries = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
+    const fromTs = dateFrom ? new Date(dateFrom + "T00:00:00").getTime() : null;
+    const toTs = dateTo ? new Date(dateTo + "T23:59:59.999").getTime() : null;
     return entries.filter((e) => {
       const rd = [e.role, e.department].filter(Boolean).join("-");
       if (q) {
@@ -201,9 +203,16 @@ const AdminEntries = () => {
         if (statusFilter === "generated" && downloaded) return false;
         if (statusFilter === "locked" && !e.download_locked) return false;
       }
+      if (fromTs !== null || toTs !== null) {
+        const raw = dateField === "downloaded_at" ? e.downloaded_at : e.created_at;
+        if (!raw) return false;
+        const ts = new Date(raw).getTime();
+        if (fromTs !== null && ts < fromTs) return false;
+        if (toTs !== null && ts > toTs) return false;
+      }
       return true;
     });
-  }, [entries, searchTerm, cityFilter, roleDeptFilter, statusFilter]);
+  }, [entries, searchTerm, cityFilter, roleDeptFilter, statusFilter, dateField, dateFrom, dateTo]);
 
   const allFilteredSelected =
     filteredEntries.length > 0 && filteredEntries.every((e) => selectedIds.has(e.id));
@@ -232,6 +241,9 @@ const AdminEntries = () => {
     setCityFilter("all");
     setRoleDeptFilter("all");
     setStatusFilter("all");
+    setDateField("created_at");
+    setDateFrom("");
+    setDateTo("");
   };
 
   // Render an ID card off-screen and return the rendered front+back canvases

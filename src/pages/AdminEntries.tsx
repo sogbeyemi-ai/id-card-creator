@@ -533,6 +533,16 @@ const AdminEntries = () => {
       pdf.addImage(backCanvas.toDataURL("image/png"), "PNG", 0, 0, 85.6, 130);
       const safeName = generatedCard.full_name.replace(/\s+/g, "_");
       pdf.save(`${safeName}_ID_Card.pdf`);
+
+      // Stamp downloaded_at if not already set
+      if (!generatedCard.downloaded_at) {
+        await supabase
+          .from("staff_entries")
+          .update({ downloaded_at: new Date().toISOString() })
+          .eq("id", generatedCard.id);
+        fetchEntries();
+      }
+
       toast.success("PDF downloaded!");
     } catch (error: any) {
       toast.error(error.message);
@@ -545,7 +555,20 @@ const AdminEntries = () => {
     (searchTerm ? 1 : 0) +
     (cityFilter !== "all" ? 1 : 0) +
     (roleDeptFilter !== "all" ? 1 : 0) +
-    (statusFilter !== "all" ? 1 : 0);
+    (statusFilter !== "all" ? 1 : 0) +
+    (dateFrom || dateTo ? 1 : 0);
+
+  const formatDateTime = (iso: string | null) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   return (
     <div className="space-y-6">

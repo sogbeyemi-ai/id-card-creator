@@ -190,3 +190,30 @@ export const findStaffMatch = (
   if (tiedAtBest) return null;
   return best;
 };
+
+export interface StaffCandidate {
+  record: VerifiedStaffRecord;
+  score: number;
+}
+
+/**
+ * Returns the top-N scoring candidates (descending) for a given name input.
+ * Used by the UI to show a confidence indicator and a disambiguation picker
+ * when multiple staff records could plausibly match.
+ */
+export const findStaffCandidates = (
+  fullName: string,
+  records: VerifiedStaffRecord[],
+  limit = 5
+): StaffCandidate[] => {
+  const trimmed = fullName.trim();
+  if (normalizeName(trimmed).length < 1) return [];
+
+  const scored: StaffCandidate[] = [];
+  for (const rec of records) {
+    const score = nameMatchScore(trimmed, rec.full_name);
+    if (score > 0) scored.push({ record: rec, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+};

@@ -134,6 +134,55 @@ const AdminUpload = () => {
       setSearchTerm("");
     }
     setEditingId(null);
+    setShowAddForm(false);
+    setAddData({ full_name: "", role: "", department: "", state: "", company: "" });
+  };
+
+  const handleAddRecord = async (batchId: string) => {
+    const fullName = addData.full_name.trim();
+    const role = addData.role.trim();
+    const department = (addData.department || "").trim();
+    const state = (addData.state || "").trim();
+    const company = (addData.company || "").trim();
+
+    if (!fullName || !role || !department || !state) {
+      toast.error("Full name, role, department, and state are required");
+      return;
+    }
+
+    setSavingAdd(true);
+    try {
+      const { data, error } = await supabase
+        .from("verified_staff")
+        .insert({
+          full_name: fullName.toUpperCase(),
+          role: role.toUpperCase(),
+          department: department.toUpperCase(),
+          state: state.toUpperCase(),
+          company: company ? company.toUpperCase() : null,
+          batch_id: batchId,
+        })
+        .select("id, full_name, role, department, state, company")
+        .single();
+      if (error) throw error;
+
+      // Instantly add to current view
+      setBatchRecords((prev) => [data as StaffRecord, ...prev]);
+      // Bump record count on the batch list
+      setBatches((prev) =>
+        prev.map((b) =>
+          b.batch_id === batchId ? { ...b, record_count: b.record_count + 1 } : b
+        )
+      );
+      setAddData({ full_name: "", role: "", department: "", state: "", company: "" });
+      setShowAddForm(false);
+      invalidateVerifiedStaffCache();
+      toast.success("Staff record added to batch");
+    } catch (err: any) {
+      toast.error("Failed to add: " + err.message);
+    } finally {
+      setSavingAdd(false);
+    }
   };
 
   const startEdit = (record: StaffRecord) => {

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { invalidateVerifiedStaffCache } from "@/hooks/useVerifiedStaffCache";
 import { Upload, FileSpreadsheet, CheckCircle, Plus, Trash2, AlertTriangle, Edit2, Save, X, ChevronDown, ChevronUp, Search } from "lucide-react";
 import {
   AlertDialog,
@@ -153,6 +154,7 @@ const AdminUpload = () => {
       setEditingId(null);
       setEditData({});
       toast.success("Record updated successfully");
+      invalidateVerifiedStaffCache();
     } catch (err: any) {
       toast.error("Failed to update: " + err.message);
     }
@@ -167,6 +169,7 @@ const AdminUpload = () => {
         .eq("batch_id", batchId);
       if (error) throw error;
       toast.success("Upload batch deleted successfully");
+      invalidateVerifiedStaffCache();
       if (expandedBatch === batchId) {
         setExpandedBatch(null);
         setBatchRecords([]);
@@ -207,6 +210,7 @@ const AdminUpload = () => {
 
       setResult({ count: data.count, columns: data.columns, filesProcessed: data.files_processed });
       toast.success(`${data.count} staff records uploaded from ${data.files_processed} file(s)!`);
+      invalidateVerifiedStaffCache();
       setFiles([]);
       fetchBatches();
     } catch (error: any) {

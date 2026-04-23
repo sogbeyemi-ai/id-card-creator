@@ -77,6 +77,7 @@ export type Database = {
           department: string
           download_count: number
           download_locked: boolean
+          downloaded_at: string | null
           full_name: string
           id: string
           id_card_url: string | null
@@ -91,6 +92,7 @@ export type Database = {
           department: string
           download_count?: number
           download_locked?: boolean
+          downloaded_at?: string | null
           full_name: string
           id?: string
           id_card_url?: string | null
@@ -105,6 +107,7 @@ export type Database = {
           department?: string
           download_count?: number
           download_locked?: boolean
+          downloaded_at?: string | null
           full_name?: string
           id?: string
           id_card_url?: string | null

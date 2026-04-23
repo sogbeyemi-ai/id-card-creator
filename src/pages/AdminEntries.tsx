@@ -56,6 +56,7 @@ interface StaffEntry {
   download_count: number;
   download_locked: boolean;
   created_at: string;
+  downloaded_at: string | null;
   photo_url: string;
 }
 
@@ -80,6 +81,9 @@ const AdminEntries = () => {
   const [cityFilter, setCityFilter] = useState<string>("all");
   const [roleDeptFilter, setRoleDeptFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateField, setDateField] = useState<"created_at" | "downloaded_at">("created_at");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -183,6 +187,8 @@ const AdminEntries = () => {
 
   const filteredEntries = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
+    const fromTs = dateFrom ? new Date(dateFrom + "T00:00:00").getTime() : null;
+    const toTs = dateTo ? new Date(dateTo + "T23:59:59.999").getTime() : null;
     return entries.filter((e) => {
       const rd = [e.role, e.department].filter(Boolean).join("-");
       if (q) {
@@ -197,9 +203,16 @@ const AdminEntries = () => {
         if (statusFilter === "generated" && downloaded) return false;
         if (statusFilter === "locked" && !e.download_locked) return false;
       }
+      if (fromTs !== null || toTs !== null) {
+        const raw = dateField === "downloaded_at" ? e.downloaded_at : e.created_at;
+        if (!raw) return false;
+        const ts = new Date(raw).getTime();
+        if (fromTs !== null && ts < fromTs) return false;
+        if (toTs !== null && ts > toTs) return false;
+      }
       return true;
     });
-  }, [entries, searchTerm, cityFilter, roleDeptFilter, statusFilter]);
+  }, [entries, searchTerm, cityFilter, roleDeptFilter, statusFilter, dateField, dateFrom, dateTo]);
 
   const allFilteredSelected =
     filteredEntries.length > 0 && filteredEntries.every((e) => selectedIds.has(e.id));
@@ -228,6 +241,9 @@ const AdminEntries = () => {
     setCityFilter("all");
     setRoleDeptFilter("all");
     setStatusFilter("all");
+    setDateField("created_at");
+    setDateFrom("");
+    setDateTo("");
   };
 
   // Render an ID card off-screen and return the rendered front+back canvases
@@ -372,11 +388,25 @@ const AdminEntries = () => {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+
+      // Stamp downloaded_at on successfully-rendered records that hadn't been
+      // marked downloaded before. Bulk update via a single .in() query.
+      const successfulIds = targets
+        .filter((t) => !t.downloaded_at)
+        .map((t) => t.id);
+      if (successfulIds.length > 0) {
+        await supabase
+          .from("staff_entries")
+          .update({ downloaded_at: new Date().toISOString() })
+          .in("id", successfulIds);
+      }
+
       toast.success(
         failed > 0
           ? `Downloaded ${targets.length - failed}/${targets.length} cards (${failed} failed)`
           : `Downloaded ${targets.length} ID cards`
       );
+      fetchEntries();
     } catch (err: any) {
       toast.error(err?.message || "Failed to build ZIP");
     } finally {
@@ -503,6 +533,16 @@ const AdminEntries = () => {
       pdf.addImage(backCanvas.toDataURL("image/png"), "PNG", 0, 0, 85.6, 130);
       const safeName = generatedCard.full_name.replace(/\s+/g, "_");
       pdf.save(`${safeName}_ID_Card.pdf`);
+
+      // Stamp downloaded_at if not already set
+      if (!generatedCard.downloaded_at) {
+        await supabase
+          .from("staff_entries")
+          .update({ downloaded_at: new Date().toISOString() })
+          .eq("id", generatedCard.id);
+        fetchEntries();
+      }
+
       toast.success("PDF downloaded!");
     } catch (error: any) {
       toast.error(error.message);
@@ -515,7 +555,20 @@ const AdminEntries = () => {
     (searchTerm ? 1 : 0) +
     (cityFilter !== "all" ? 1 : 0) +
     (roleDeptFilter !== "all" ? 1 : 0) +
-    (statusFilter !== "all" ? 1 : 0);
+    (statusFilter !== "all" ? 1 : 0) +
+    (dateFrom || dateTo ? 1 : 0);
+
+  const formatDateTime = (iso: string | null) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -642,6 +695,40 @@ const AdminEntries = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Date range filter */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <Select
+                value={dateField}
+                onValueChange={(v: "created_at" | "downloaded_at") => setDateField(v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="created_at">Generated date</SelectItem>
+                  <SelectItem value="downloaded_at">Downloaded date</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="space-y-1">
+                <Label htmlFor="date-from" className="text-xs text-muted-foreground">From</Label>
+                <Input
+                  id="date-from"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="date-to" className="text-xs text-muted-foreground">To</Label>
+                <Input
+                  id="date-to"
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
+              </div>
+            </div>
           </Card>
 
           <div className="rounded-lg border bg-card overflow-auto">
@@ -659,7 +746,8 @@ const AdminEntries = () => {
                   <TableHead>Role - Department</TableHead>
                   <TableHead>City / State</TableHead>
                   <TableHead>Company</TableHead>
-                  <TableHead>Downloads</TableHead>
+                  <TableHead>Generated</TableHead>
+                  <TableHead>Downloaded</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -667,7 +755,7 @@ const AdminEntries = () => {
               <TableBody>
                 {filteredEntries.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                       {loading ? "Filtering records…" : "No entries match the current filters"}
                     </TableCell>
                   </TableRow>
@@ -690,13 +778,18 @@ const AdminEntries = () => {
                         <TableCell>{rd || "—"}</TableCell>
                         <TableCell>{entry.state || "—"}</TableCell>
                         <TableCell>{entry.company}</TableCell>
-                        <TableCell>{entry.download_count}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {formatDateTime(entry.created_at)}
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {formatDateTime(entry.downloaded_at)}
+                        </TableCell>
                         <TableCell>
                           {entry.download_locked ? (
                             <Badge variant="destructive" className="text-xs">
                               Locked
                             </Badge>
-                          ) : entry.download_count > 0 ? (
+                          ) : entry.download_count > 0 || entry.downloaded_at ? (
                             <Badge variant="secondary" className="text-xs">
                               Downloaded
                             </Badge>

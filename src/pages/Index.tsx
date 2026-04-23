@@ -5,7 +5,7 @@ import StaffForm, { StaffFormData } from "@/components/StaffForm";
 import { IDCardFront, IDCardBack } from "@/components/IDCardPreview";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { namesMatch } from "@/lib/nameMatch";
+import { useVerifiedStaffCache, findStaffMatch } from "@/hooks/useVerifiedStaffCache";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 
@@ -27,6 +27,10 @@ const Index = () => {
   const frontRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLDivElement>(null);
 
+  // Warm shared cache on mount so verification is instant and uses the SAME
+  // dataset that the form's auto-fill uses (no mismatches possible).
+  const { records: verifiedStaff } = useVerifiedStaffCache();
+
   const handleSubmit = async (data: StaffFormData) => {
     if (!data.photo) return;
 
@@ -34,23 +38,27 @@ const Index = () => {
     setVerificationError(null);
 
     try {
-      // Fetch ALL verified staff with pagination (Supabase default limit is 1000)
-      let allStaff: { id: string; full_name: string; role: string }[] = [];
-      let from = 0;
-      const pageSize = 1000;
-      while (true) {
-        const { data: page, error: verifyError } = await supabase
-          .from("verified_staff")
-          .select("id, full_name, role")
-          .range(from, from + pageSize - 1);
-        if (verifyError) throw verifyError;
-        if (!page || page.length === 0) break;
-        allStaff = allStaff.concat(page);
-        if (page.length < pageSize) break;
-        from += pageSize;
+      // Use the shared in-memory cache. If empty (cache miss), do one paginated fetch.
+      let staff = verifiedStaff;
+      if (staff.length === 0) {
+        const all: { id: string; full_name: string; role: string | null; department: string | null }[] = [];
+        let from = 0;
+        const pageSize = 1000;
+        while (true) {
+          const { data: page, error: verifyError } = await supabase
+            .from("verified_staff")
+            .select("id, full_name, role, department")
+            .range(from, from + pageSize - 1);
+          if (verifyError) throw verifyError;
+          if (!page || page.length === 0) break;
+          all.push(...page);
+          if (page.length < pageSize) break;
+          from += pageSize;
+        }
+        staff = all;
       }
 
-      const matched = allStaff.find((s) => namesMatch(data.fullName, s.full_name));
+      const matched = findStaffMatch(data.fullName, staff);
 
       if (!matched) {
         setVerificationError("You are not authorized to generate an ID. Your name does not match our records. Contact admin.");
@@ -138,7 +146,7 @@ const Index = () => {
       await supabase.from("download_logs").insert({ staff_entry_id: generatedCard.id });
       await supabase
         .from("staff_entries")
-        .update({ download_count: 1, download_locked: true })
+        .update({ download_count: 1, download_locked: true, downloaded_at: new Date().toISOString() })
         .eq("id", generatedCard.id);
 
       setGeneratedCard((prev) => prev ? { ...prev, downloadLocked: true } : prev);

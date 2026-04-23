@@ -56,6 +56,7 @@ interface StaffEntry {
   download_count: number;
   download_locked: boolean;
   created_at: string;
+  downloaded_at: string | null;
   photo_url: string;
 }
 
@@ -80,6 +81,9 @@ const AdminEntries = () => {
   const [cityFilter, setCityFilter] = useState<string>("all");
   const [roleDeptFilter, setRoleDeptFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateField, setDateField] = useState<"created_at" | "downloaded_at">("created_at");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

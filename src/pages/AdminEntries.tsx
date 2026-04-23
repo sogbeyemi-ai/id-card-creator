@@ -729,6 +729,67 @@ const AdminEntries = () => {
             </div>
           </div>
 
+          {/* Live progress bar during bulk download */}
+          {bulkDownloading && (
+            <Card className="p-4 space-y-2 border-accent/40">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">{bulkStatus}</span>
+                <span className="text-muted-foreground">{bulkProgress}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full bg-accent transition-all"
+                  style={{ width: `${bulkProgress}%` }}
+                />
+              </div>
+            </Card>
+          )}
+
+          {/* Saved downloads — re-download without re-rendering */}
+          {savedDownloads.length > 0 && (
+            <Card className="p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Save className="w-4 h-4 text-accent" />
+                Saved Downloads
+                <Badge variant="secondary" className="text-xs">
+                  {savedDownloads.length}
+                </Badge>
+                <span className="ml-auto text-xs text-muted-foreground font-normal">
+                  Kept in this session — re-download instantly
+                </span>
+              </div>
+              <div className="space-y-2">
+                {savedDownloads.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-3 rounded-md border bg-muted/30 px-3 py-2 text-sm"
+                  >
+                    <PackageOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{s.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {s.count} card{s.count === 1 ? "" : "s"} · {s.sizeKb.toLocaleString()} KB ·{" "}
+                        {new Date(s.createdAt).toLocaleTimeString()}
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => redownloadSaved(s)}>
+                      <Download className="w-4 h-4 mr-1" />
+                      Download
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => removeSaved(s.id)}
+                      title="Remove from saved list"
+                    >
+                      <Trash2 className="w-4 h-4 text-muted-foreground" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {/* Filter bar */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">

@@ -401,16 +401,61 @@ const AdminUpload = () => {
                     <p className="text-sm text-muted-foreground text-center py-4">Loading records…</p>
                   ) : (
                     <>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Search className="w-4 h-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search records…"
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                        <p className="text-xs text-muted-foreground whitespace-nowrap">{filteredRecords.length} records</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2 flex-1">
+                          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <Input
+                            placeholder="Search records…"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-muted-foreground whitespace-nowrap">{filteredRecords.length} records</p>
+                          <Button
+                            size="sm"
+                            variant={showAddForm ? "outline" : "default"}
+                            className={showAddForm ? "" : "bg-accent text-accent-foreground hover:bg-accent/90"}
+                            onClick={() => setShowAddForm((s) => !s)}
+                          >
+                            {showAddForm ? <><X className="w-3 h-3 mr-1" /> Cancel</> : <><Plus className="w-3 h-3 mr-1" /> Add Staff</>}
+                          </Button>
+                        </div>
                       </div>
+
+                      {showAddForm && (
+                        <div className="bg-accent/5 border border-accent/30 rounded-lg p-3 mb-3 space-y-2">
+                          <p className="text-xs font-semibold flex items-center gap-1">
+                            <Plus className="w-3 h-3" /> Add new staff to this batch
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                            <Input placeholder="Full name *" value={addData.full_name} onChange={(e) => setAddData((d) => ({ ...d, full_name: e.target.value }))} className="h-8 text-xs" />
+                            <Input placeholder="Role *" value={addData.role} onChange={(e) => setAddData((d) => ({ ...d, role: e.target.value }))} className="h-8 text-xs" />
+                            <Input placeholder="Department *" value={addData.department || ""} onChange={(e) => setAddData((d) => ({ ...d, department: e.target.value }))} className="h-8 text-xs" />
+                            <Input placeholder="State *" value={addData.state || ""} onChange={(e) => setAddData((d) => ({ ...d, state: e.target.value }))} className="h-8 text-xs" />
+                            <Input placeholder="Company (optional)" value={addData.company || ""} onChange={(e) => setAddData((d) => ({ ...d, company: e.target.value }))} className="h-8 text-xs" />
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              size="sm"
+                              onClick={() => handleAddRecord(batch.batch_id)}
+                              disabled={savingAdd}
+                              className="bg-accent text-accent-foreground hover:bg-accent/90"
+                            >
+                              {savingAdd ? (
+                                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" />
+                              ) : (
+                                <Save className="w-3 h-3 mr-1" />
+                              )}
+                              Save
+                            </Button>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            Existing uploaded records are not affected. New entry appears at the top of this batch's list.
+                          </p>
+                        </div>
+                      )}
                       <div className="max-h-96 overflow-auto">
                         <Table>
                           <TableHeader>

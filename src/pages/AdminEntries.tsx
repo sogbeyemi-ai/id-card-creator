@@ -695,6 +695,40 @@ const AdminEntries = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Date range filter */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <Select
+                value={dateField}
+                onValueChange={(v: "created_at" | "downloaded_at") => setDateField(v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="created_at">Generated date</SelectItem>
+                  <SelectItem value="downloaded_at">Downloaded date</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="space-y-1">
+                <Label htmlFor="date-from" className="text-xs text-muted-foreground">From</Label>
+                <Input
+                  id="date-from"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="date-to" className="text-xs text-muted-foreground">To</Label>
+                <Input
+                  id="date-to"
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
+              </div>
+            </div>
           </Card>
 
           <div className="rounded-lg border bg-card overflow-auto">
@@ -712,7 +746,8 @@ const AdminEntries = () => {
                   <TableHead>Role - Department</TableHead>
                   <TableHead>City / State</TableHead>
                   <TableHead>Company</TableHead>
-                  <TableHead>Downloads</TableHead>
+                  <TableHead>Generated</TableHead>
+                  <TableHead>Downloaded</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>

@@ -388,11 +388,25 @@ const AdminEntries = () => {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+
+      // Stamp downloaded_at on successfully-rendered records that hadn't been
+      // marked downloaded before. Bulk update via a single .in() query.
+      const successfulIds = targets
+        .filter((t) => !t.downloaded_at)
+        .map((t) => t.id);
+      if (successfulIds.length > 0) {
+        await supabase
+          .from("staff_entries")
+          .update({ downloaded_at: new Date().toISOString() })
+          .in("id", successfulIds);
+      }
+
       toast.success(
         failed > 0
           ? `Downloaded ${targets.length - failed}/${targets.length} cards (${failed} failed)`
           : `Downloaded ${targets.length} ID cards`
       );
+      fetchEntries();
     } catch (err: any) {
       toast.error(err?.message || "Failed to build ZIP");
     } finally {

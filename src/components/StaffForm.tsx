@@ -53,23 +53,33 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
   const [autoFilled, setAutoFilled] = useState(false);
   const [departmentMissing, setDepartmentMissing] = useState(false);
   const [roleDeptManuallyEdited, setRoleDeptManuallyEdited] = useState(false);
+  const [chosenStaffId, setChosenStaffId] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
 
   const lookup = useStaffNameLookup(formData.fullName);
 
+  // Resolve the effective record: if user picked one from the disambiguation
+  // list, prefer that; otherwise use the auto-detected best match.
+  const effectiveMatch =
+    (chosenStaffId && lookup.candidates.find((c) => c.record.id === chosenStaffId)?.record) ||
+    lookup.match;
+
   // Auto-fill role-department when a verified record is found.
-  // Always populates the field on a match (overrides previous auto-fills),
-  // unless the user has manually edited the role-department for the current name.
+  // For ambiguous matches we still pre-fill from the best candidate but flag
+  // it as low confidence so the user can confirm or pick the correct staff.
   useEffect(() => {
     if (lookup.status === "idle" || lookup.status === "not_found") {
       setAutoFilled(false);
       setDepartmentMissing(false);
+      setShowPicker(false);
       return;
     }
-    if (lookup.status !== "found" || !lookup.match) return;
+    if (lookup.status === "searching") return;
+    if (!effectiveMatch) return;
     if (roleDeptManuallyEdited) return;
 
-    const role = (lookup.match.role || "").trim().toUpperCase();
-    const dept = (lookup.match.department || "").trim().toUpperCase();
+    const role = (effectiveMatch.role || "").trim().toUpperCase();
+    const dept = (effectiveMatch.department || "").trim().toUpperCase();
 
     if (role && dept) {
       setFormData((prev) =>
@@ -94,7 +104,13 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
       setDepartmentMissing(false);
     }
     setFormError(null);
-  }, [lookup.status, lookup.match, roleDeptManuallyEdited]);
+  }, [lookup.status, effectiveMatch, roleDeptManuallyEdited]);
+
+  // Lock editing only when confidence is high/exact AND no ambiguity.
+  const isAmbiguous = lookup.status === "ambiguous";
+  const isHighConfidence =
+    lookup.confidence === "exact" || (lookup.confidence === "high" && !isAmbiguous);
+  const lockRoleDept = autoFilled && !departmentMissing && isHighConfidence && !roleDeptManuallyEdited;
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

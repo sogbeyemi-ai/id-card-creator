@@ -34,6 +34,7 @@ const AdminDashboard = () => {
   const [nameFilter, setNameFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
   const [roleDeptFilter, setRoleDeptFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "downloaded" | "generated" | "pending">("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -231,9 +232,14 @@ const AdminDashboard = () => {
     const toTs = dateTo ? new Date(dateTo + "T23:59:59.999").getTime() : null;
     return downloadEntries.filter((e) => {
       const rd = [e.role, e.department].filter(Boolean).join("-");
+      const hasDownloaded = e.download_count > 0 || !!e.downloaded_at;
+      const hasGenerated = !!e.downloaded_at || e.download_count > 0 || (e.id?.startsWith("gen-") ?? false);
       if (q && !e.full_name.toLowerCase().includes(q)) return false;
       if (cityFilter !== "all" && (e.state || "").trim() !== cityFilter) return false;
       if (roleDeptFilter !== "all" && rd !== roleDeptFilter) return false;
+      if (statusFilter === "downloaded" && !hasDownloaded) return false;
+      if (statusFilter === "generated" && !hasGenerated) return false;
+      if (statusFilter === "pending" && hasDownloaded) return false;
       if (fromTs !== null || toTs !== null) {
         const raw = e.downloaded_at || e.created_at;
         const ts = new Date(raw).getTime();
@@ -242,7 +248,7 @@ const AdminDashboard = () => {
       }
       return true;
     });
-  }, [downloadEntries, nameFilter, cityFilter, roleDeptFilter, dateFrom, dateTo]);
+  }, [downloadEntries, nameFilter, cityFilter, roleDeptFilter, statusFilter, dateFrom, dateTo]);
 
   const reportStats = useMemo(() => {
     const downloaded = filteredReport.filter((e) => e.download_count > 0 || e.downloaded_at);
@@ -262,6 +268,7 @@ const AdminDashboard = () => {
     setNameFilter("");
     setCityFilter("all");
     setRoleDeptFilter("all");
+    setStatusFilter("all");
     setDateFrom("");
     setDateTo("");
   };
@@ -436,6 +443,18 @@ const AdminDashboard = () => {
                 {roleDeptOptions.map((rd) => (
                   <SelectItem key={rd} value={rd}>{rd}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Status</Label>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="downloaded">Downloaded</SelectItem>
+                <SelectItem value="generated">Generated</SelectItem>
+                <SelectItem value="pending">Pending (not downloaded)</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -37,6 +37,8 @@ import {
   PackageOpen,
   Filter,
   X,
+  Save,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IDCardFront, IDCardBack } from "@/components/IDCardPreview";

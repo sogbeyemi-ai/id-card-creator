@@ -717,7 +717,7 @@ const AdminEntries = () => {
                 {bulkDownloading ? (
                   <span className="flex items-center gap-2">
                     <span className="w-4 h-4 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
-                    Preparing… {bulkProgress}%
+                    {bulkStatus || `Preparing… ${bulkProgress}%`}
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">

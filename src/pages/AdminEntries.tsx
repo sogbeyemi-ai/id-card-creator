@@ -37,6 +37,8 @@ import {
   PackageOpen,
   Filter,
   X,
+  Save,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IDCardFront, IDCardBack } from "@/components/IDCardPreview";
@@ -91,6 +93,18 @@ const AdminEntries = () => {
   // Bulk download
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
+  const [bulkStatus, setBulkStatus] = useState<string>("");
+
+  // Saved downloads (persist generated ZIPs in memory for re-download)
+  interface SavedDownload {
+    id: string;
+    name: string;
+    blob: Blob;
+    sizeKb: number;
+    count: number;
+    createdAt: number;
+  }
+  const [savedDownloads, setSavedDownloads] = useState<SavedDownload[]>([]);
 
   // Edit dialog
   const [editEntry, setEditEntry] = useState<StaffEntry | null>(null);
@@ -246,7 +260,8 @@ const AdminEntries = () => {
     setDateTo("");
   };
 
-  // Render an ID card off-screen and return the rendered front+back canvases
+  // Render an ID card off-screen and return the rendered front+back canvases.
+  // Optimized: no fixed setTimeout — wait only for actual image readiness.
   const renderCardToCanvases = async (
     entry: StaffEntry
   ): Promise<{ front: HTMLCanvasElement; back: HTMLCanvasElement }> => {
@@ -256,6 +271,7 @@ const AdminEntries = () => {
       host.style.left = "-99999px";
       host.style.top = "0";
       host.style.width = "350px";
+      host.style.pointerEvents = "none";
       document.body.appendChild(host);
 
       const root = createRoot(host);
@@ -277,7 +293,6 @@ const AdminEntries = () => {
         const roleDept = [entry.role, entry.department].filter(Boolean).join("-");
         const company = entry.company as CompanyTemplate;
 
-        // Use refs via callback
         let frontEl: HTMLDivElement | null = null;
         let backEl: HTMLDivElement | null = null;
 
@@ -298,42 +313,49 @@ const AdminEntries = () => {
           </div>
         );
 
-        // Wait for images to load then capture
-        setTimeout(async () => {
-          try {
-            // Wait for all images inside host to load
-            const imgs = Array.from(host.querySelectorAll("img"));
-            await Promise.all(
-              imgs.map(
-                (img) =>
-                  new Promise<void>((res) => {
-                    if (img.complete && img.naturalWidth > 0) return res();
-                    img.onload = () => res();
-                    img.onerror = () => res();
-                  })
-              )
-            );
+        // Two paint frames is enough for React to commit + browser to layout.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(async () => {
+            try {
+              const imgs = Array.from(host.querySelectorAll("img"));
+              await Promise.all(
+                imgs.map(
+                  (img) =>
+                    new Promise<void>((res) => {
+                      if (img.complete && img.naturalWidth > 0) return res();
+                      const done = () => res();
+                      img.addEventListener("load", done, { once: true });
+                      img.addEventListener("error", done, { once: true });
+                    })
+                )
+              );
 
-            const frontTarget = (frontEl?.firstElementChild as HTMLElement) || frontEl!;
-            const backTarget = (backEl?.firstElementChild as HTMLElement) || backEl!;
+              const frontTarget = (frontEl?.firstElementChild as HTMLElement) || frontEl!;
+              const backTarget = (backEl?.firstElementChild as HTMLElement) || backEl!;
 
-            const front = await html2canvas(frontTarget, {
-              scale: 2,
-              useCORS: true,
-              backgroundColor: "#ffffff",
-            });
-            const back = await html2canvas(backTarget, {
-              scale: 2,
-              useCORS: true,
-              backgroundColor: "#ffffff",
-            });
-            cleanup();
-            resolve({ front, back });
-          } catch (err) {
-            cleanup();
-            reject(err);
-          }
-        }, 600);
+              // Render front + back in parallel; scale 1.5 keeps it crisp at 85.6mm
+              const [front, back] = await Promise.all([
+                html2canvas(frontTarget, {
+                  scale: 1.5,
+                  useCORS: true,
+                  backgroundColor: "#ffffff",
+                  logging: false,
+                }),
+                html2canvas(backTarget, {
+                  scale: 1.5,
+                  useCORS: true,
+                  backgroundColor: "#ffffff",
+                  logging: false,
+                }),
+              ]);
+              cleanup();
+              resolve({ front, back });
+            } catch (err) {
+              cleanup();
+              reject(err);
+            }
+          });
+        });
       } catch (err) {
         cleanup();
         reject(err);
@@ -344,10 +366,50 @@ const AdminEntries = () => {
   const buildPdfBlob = async (entry: StaffEntry): Promise<Blob> => {
     const { front, back } = await renderCardToCanvases(entry);
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [85.6, 130] });
-    pdf.addImage(front.toDataURL("image/png"), "PNG", 0, 0, 85.6, 130);
+    // JPEG @ 0.85 quality — visually identical to PNG for photo cards, ~5x smaller & faster.
+    pdf.addImage(front.toDataURL("image/jpeg", 0.85), "JPEG", 0, 0, 85.6, 130);
     pdf.addPage([85.6, 130], "portrait");
-    pdf.addImage(back.toDataURL("image/png"), "PNG", 0, 0, 85.6, 130);
+    pdf.addImage(back.toDataURL("image/jpeg", 0.85), "JPEG", 0, 0, 85.6, 130);
     return pdf.output("blob");
+  };
+
+  // Process an array with bounded concurrency (default 4 in parallel).
+  const runWithConcurrency = async <T, R>(
+    items: T[],
+    worker: (item: T, index: number) => Promise<R>,
+    concurrency: number,
+    onProgress?: (done: number) => void
+  ): Promise<(R | undefined)[]> => {
+    const results: (R | undefined)[] = new Array(items.length);
+    let cursor = 0;
+    let done = 0;
+    const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= items.length) return;
+        try {
+          results[i] = await worker(items[i], i);
+        } catch (err) {
+          results[i] = undefined;
+          console.error("worker failed", err);
+        }
+        done++;
+        onProgress?.(done);
+      }
+    });
+    await Promise.all(runners);
+    return results;
+  };
+
+  const triggerBlobDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const handleBulkDownload = async () => {
@@ -358,39 +420,65 @@ const AdminEntries = () => {
     }
     setBulkDownloading(true);
     setBulkProgress(0);
+    setBulkStatus(`Rendering 0 / ${targets.length}…`);
+
     const zip = new JSZip();
-    let done = 0;
     let failed = 0;
 
-    for (const entry of targets) {
-      try {
+    // Render PDFs in parallel batches of 4 (sweet spot for browser CPU/memory).
+    const CONCURRENCY = 4;
+    const blobs = await runWithConcurrency(
+      targets,
+      async (entry) => {
         const blob = await buildPdfBlob(entry);
-        const safeName = sanitize(entry.full_name) || "ID";
-        const shortId = entry.id.slice(0, 8);
-        zip.file(`${safeName}_${shortId}.pdf`, blob);
-      } catch (err) {
-        console.error("Failed to render card", entry.id, err);
-        failed++;
+        return { entry, blob };
+      },
+      CONCURRENCY,
+      (done) => {
+        setBulkProgress(Math.round((done / targets.length) * 100));
+        setBulkStatus(`Rendering ${done} / ${targets.length}…`);
       }
-      done++;
-      setBulkProgress(Math.round((done / targets.length) * 100));
-    }
+    );
+
+    blobs.forEach((res) => {
+      if (!res || !res.blob) {
+        failed++;
+        return;
+      }
+      const safeName = sanitize(res.entry.full_name) || "ID";
+      const shortId = res.entry.id.slice(0, 8);
+      zip.file(`${safeName}_${shortId}.pdf`, res.blob);
+    });
 
     try {
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement("a");
-      a.href = url;
+      setBulkStatus("Compressing ZIP…");
+      // STORE = no deflate. PDFs are already compressed; dramatically faster.
+      const zipBlob = await zip.generateAsync(
+        { type: "blob", compression: "STORE" },
+        (meta) => {
+          setBulkProgress(Math.round(meta.percent));
+        }
+      );
+
       const stamp = new Date().toISOString().slice(0, 10);
       const cityTag = cityFilter !== "all" ? `_${sanitize(cityFilter)}` : "";
-      a.download = `id_cards${cityTag}_${stamp}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const filename = `id_cards${cityTag}_${stamp}.zip`;
 
-      // Stamp downloaded_at on successfully-rendered records that hadn't been
-      // marked downloaded before. Bulk update via a single .in() query.
+      // Save to in-memory list for re-download
+      const saved: SavedDownload = {
+        id: crypto.randomUUID(),
+        name: filename,
+        blob: zipBlob,
+        sizeKb: Math.round(zipBlob.size / 1024),
+        count: targets.length - failed,
+        createdAt: Date.now(),
+      };
+      setSavedDownloads((prev) => [saved, ...prev].slice(0, 10));
+
+      // Trigger immediate download
+      triggerBlobDownload(zipBlob, filename);
+
+      // Stamp downloaded_at for newly downloaded records
       const successfulIds = targets
         .filter((t) => !t.downloaded_at)
         .map((t) => t.id);
@@ -412,7 +500,17 @@ const AdminEntries = () => {
     } finally {
       setBulkDownloading(false);
       setBulkProgress(0);
+      setBulkStatus("");
     }
+  };
+
+  const redownloadSaved = (item: SavedDownload) => {
+    triggerBlobDownload(item.blob, item.name);
+    toast.success(`Re-downloaded ${item.name}`);
+  };
+
+  const removeSaved = (id: string) => {
+    setSavedDownloads((prev) => prev.filter((s) => s.id !== id));
   };
 
   // Edit handlers
@@ -619,7 +717,7 @@ const AdminEntries = () => {
                 {bulkDownloading ? (
                   <span className="flex items-center gap-2">
                     <span className="w-4 h-4 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
-                    Preparing… {bulkProgress}%
+                    {bulkStatus || `Preparing… ${bulkProgress}%`}
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">
@@ -630,6 +728,67 @@ const AdminEntries = () => {
               </Button>
             </div>
           </div>
+
+          {/* Live progress bar during bulk download */}
+          {bulkDownloading && (
+            <Card className="p-4 space-y-2 border-accent/40">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">{bulkStatus}</span>
+                <span className="text-muted-foreground">{bulkProgress}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full bg-accent transition-all"
+                  style={{ width: `${bulkProgress}%` }}
+                />
+              </div>
+            </Card>
+          )}
+
+          {/* Saved downloads — re-download without re-rendering */}
+          {savedDownloads.length > 0 && (
+            <Card className="p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Save className="w-4 h-4 text-accent" />
+                Saved Downloads
+                <Badge variant="secondary" className="text-xs">
+                  {savedDownloads.length}
+                </Badge>
+                <span className="ml-auto text-xs text-muted-foreground font-normal">
+                  Kept in this session — re-download instantly
+                </span>
+              </div>
+              <div className="space-y-2">
+                {savedDownloads.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-3 rounded-md border bg-muted/30 px-3 py-2 text-sm"
+                  >
+                    <PackageOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{s.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {s.count} card{s.count === 1 ? "" : "s"} · {s.sizeKb.toLocaleString()} KB ·{" "}
+                        {new Date(s.createdAt).toLocaleTimeString()}
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => redownloadSaved(s)}>
+                      <Download className="w-4 h-4 mr-1" />
+                      Download
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => removeSaved(s.id)}
+                      title="Remove from saved list"
+                    >
+                      <Trash2 className="w-4 h-4 text-muted-foreground" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           {/* Filter bar */}
           <Card className="p-4 space-y-3">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { namesMatch, normalizeName } from "@/lib/nameMatch";
+import { nameMatchScore, normalizeName } from "@/lib/nameMatch";
 
 export interface VerifiedStaffRecord {
   id: string;
@@ -145,11 +145,48 @@ export const useVerifiedStaffCache = () => {
  * Synchronous lookup against the in-memory cache. Returns the matched record
  * or null. Use this together with useVerifiedStaffCache so the data is loaded.
  */
+/**
+ * Synchronous lookup against the in-memory cache. Scores ALL candidates and
+ * returns the highest-scoring record so that exact matches always beat
+ * partial overlaps (e.g. "ADEKUNLE MARY OLUWAYEMISI" must NOT resolve to
+ * "FALEKE MARY OLUWAYEMISI" just because two words happen to overlap).
+ *
+ * Returns null when the best score is ambiguous (tie at the weak-overlap
+ * tier) or below the confidence threshold.
+ */
 export const findStaffMatch = (
   fullName: string,
   records: VerifiedStaffRecord[]
 ): VerifiedStaffRecord | null => {
   const trimmed = fullName.trim();
   if (normalizeName(trimmed).length < 1) return null;
-  return records.find((s) => namesMatch(trimmed, s.full_name)) || null;
+
+  let best: VerifiedStaffRecord | null = null;
+  let bestScore = 0;
+  let tiedAtBest = false;
+
+  for (const rec of records) {
+    const score = nameMatchScore(trimmed, rec.full_name);
+    if (score <= 0) continue;
+    if (score > bestScore) {
+      bestScore = score;
+      best = rec;
+      tiedAtBest = false;
+    } else if (score === bestScore) {
+      tiedAtBest = true;
+    }
+  }
+
+  if (!best) return null;
+
+  // Exact (1000) always wins, even if duplicates exist (same person uploaded
+  // twice will have identical role/department — safe to return either).
+  if (bestScore >= 1000) return best;
+
+  // Strong subset matches (>=900) are reliable.
+  if (bestScore >= 900) return best;
+
+  // Weak overlap tier: if multiple different people tie, refuse to guess.
+  if (tiedAtBest) return null;
+  return best;
 };

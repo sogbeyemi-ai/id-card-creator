@@ -312,14 +312,22 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
             placeholder="e.g. BD-CARDLESS PAYMENT BUSINESS"
             value={formData.roleDepartment}
             onChange={(e) => {
+              if (autoFilled && !departmentMissing) return;
               setFormData((prev) => ({ ...prev, roleDepartment: e.target.value.toUpperCase() }));
               setFormError(null);
               setRoleDeptManuallyEdited(true);
             }}
             required
-            className="uppercase"
+            readOnly={autoFilled && !departmentMissing}
+            aria-readonly={autoFilled && !departmentMissing}
+            tabIndex={autoFilled && !departmentMissing ? -1 : 0}
+            className={`uppercase ${autoFilled && !departmentMissing ? "bg-muted cursor-not-allowed text-muted-foreground" : ""}`}
           />
-          {departmentMissing ? (
+          {autoFilled && !departmentMissing ? (
+            <p className="text-xs text-muted-foreground">
+              Auto-filled from verified records. This field is locked. Contact admin if incorrect.
+            </p>
+          ) : departmentMissing ? (
             <p className="text-xs text-accent font-medium">
               Please enter your department after the role (format: ROLE-DEPARTMENT)
             </p>

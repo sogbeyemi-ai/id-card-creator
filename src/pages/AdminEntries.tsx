@@ -113,6 +113,13 @@ const AdminEntries = () => {
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Delete confirmation
+  const [deleteTargets, setDeleteTargets] = useState<StaffEntry[]>([]);
+  const [deleting, setDeleting] = useState(false);
+
+  // Duplicates tool
+  const [showDuplicates, setShowDuplicates] = useState(false);
+
   // Generate state
   const [verifiedStaff, setVerifiedStaff] = useState<VerifiedStaff[]>([]);
   const [staffSearch, setStaffSearch] = useState("");

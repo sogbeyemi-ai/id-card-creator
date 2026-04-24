@@ -904,7 +904,7 @@ const AdminEntries = () => {
                   {duplicateGroups.length} group{duplicateGroups.length === 1 ? "" : "s"}
                 </Badge>
                 <span className="ml-auto text-xs text-muted-foreground font-normal">
-                  Oldest of each group is kept · extras pre-selected for deletion
+                  Latest of each group is kept · older copies pre-selected for deletion
                 </span>
                 <Button variant="ghost" size="sm" onClick={() => setShowDuplicates(false)} className="h-7">
                   <X className="w-3 h-3 mr-1" /> Hide

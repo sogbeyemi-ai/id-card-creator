@@ -926,16 +926,54 @@ const AdminEntries = () => {
                           {group.length} copies
                         </Badge>
                       </div>
-                      <div className="space-y-0.5 text-muted-foreground">
-                        {group.map((e, i) => (
-                          <div key={e.id} className="flex items-center gap-2">
-                            <span className={i === 0 ? "text-accent font-medium" : "text-destructive"}>
-                              {i === 0 ? "KEEP" : "DELETE"}
-                            </span>
-                            <span>· {formatDateTime(e.created_at)}</span>
-                            <span>· {e.company}</span>
-                          </div>
-                        ))}
+                      <div className="space-y-1">
+                        {group.map((e, i) => {
+                          const markedForDelete = selectedIds.has(e.id);
+                          return (
+                            <div
+                              key={e.id}
+                              className="flex items-center gap-2 flex-wrap rounded px-2 py-1 hover:bg-background/60"
+                            >
+                              <Badge
+                                variant={i === 0 ? "secondary" : "destructive"}
+                                className="text-[10px]"
+                              >
+                                {i === 0 ? "LATEST" : `OLDER #${i}`}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDateTime(e.created_at)} · {e.company}
+                              </span>
+                              <div className="ml-auto flex items-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant={markedForDelete ? "outline" : "ghost"}
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() => {
+                                    setSelectedIds((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(e.id);
+                                      return next;
+                                    });
+                                    toast.success(`Keeping ${e.full_name} (${formatDateTime(e.created_at)})`);
+                                  }}
+                                  title="Keep this record (remove from delete selection)"
+                                >
+                                  Keep
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() => requestDeleteOne(e)}
+                                  title="Delete this record now"
+                                >
+                                  <Trash2 className="w-3 h-3 mr-1" />
+                                  Delete now
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

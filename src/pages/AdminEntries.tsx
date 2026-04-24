@@ -39,6 +39,7 @@ import {
   X,
   Save,
   Trash2,
+  Copy,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IDCardFront, IDCardBack } from "@/components/IDCardPreview";

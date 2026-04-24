@@ -788,6 +788,30 @@ const AdminEntries = () => {
                 Refresh
               </Button>
               <Button
+                variant="outline"
+                size="sm"
+                onClick={autoSelectDuplicates}
+                disabled={loading}
+                title="Find duplicate records and pre-select extras for deletion"
+              >
+                <Copy className="w-4 h-4 mr-1" />
+                Find Duplicates
+                {duplicateGroups.length > 0 && (
+                  <Badge variant="destructive" className="ml-2 text-xs">
+                    {duplicateGroups.reduce((n, g) => n + g.length - 1, 0)}
+                  </Badge>
+                )}
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={selectedIds.size === 0 || deleting || bulkDownloading}
+                onClick={requestDeleteSelected}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Delete ({selectedIds.size})
+              </Button>
+              <Button
                 size="sm"
                 disabled={selectedIds.size === 0 || bulkDownloading}
                 onClick={handleBulkDownload}

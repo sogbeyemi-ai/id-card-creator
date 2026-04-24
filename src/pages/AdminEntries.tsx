@@ -39,6 +39,7 @@ import {
   X,
   Save,
   Trash2,
+  Copy,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IDCardFront, IDCardBack } from "@/components/IDCardPreview";
@@ -111,6 +112,13 @@ const AdminEntries = () => {
   const [editForm, setEditForm] = useState({ full_name: "", roleDept: "", state: "" });
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Delete confirmation
+  const [deleteTargets, setDeleteTargets] = useState<StaffEntry[]>([]);
+  const [deleting, setDeleting] = useState(false);
+
+  // Duplicates tool
+  const [showDuplicates, setShowDuplicates] = useState(false);
 
   // Generate state
   const [verifiedStaff, setVerifiedStaff] = useState<VerifiedStaff[]>([]);
@@ -560,6 +568,77 @@ const AdminEntries = () => {
     fetchEntries();
   };
 
+  // Delete handlers
+  const requestDeleteOne = (entry: StaffEntry) => {
+    setDeleteTargets([entry]);
+  };
+
+  const requestDeleteSelected = () => {
+    const targets = entries.filter((e) => selectedIds.has(e.id));
+    if (targets.length === 0) {
+      toast.error("Select at least one record");
+      return;
+    }
+    setDeleteTargets(targets);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTargets.length === 0) return;
+    setDeleting(true);
+    const ids = deleteTargets.map((t) => t.id);
+    const { error } = await supabase.from("staff_entries").delete().in("id", ids);
+    setDeleting(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      deleteTargets.length === 1
+        ? `Deleted ${deleteTargets[0].full_name}`
+        : `Deleted ${deleteTargets.length} records`
+    );
+    // Clear selection of deleted ids
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
+    setDeleteTargets([]);
+    fetchEntries();
+  };
+
+  // Duplicate detection: same normalized full_name + role + department + state
+  const duplicateGroups = useMemo(() => {
+    const norm = (s: string | null | undefined) => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
+    const groups = new Map<string, StaffEntry[]>();
+    entries.forEach((e) => {
+      const key = `${norm(e.full_name)}|${norm(e.role)}|${norm(e.department)}|${norm(e.state)}`;
+      if (!key.replace(/\|/g, "").trim()) return;
+      const arr = groups.get(key) || [];
+      arr.push(e);
+      groups.set(key, arr);
+    });
+    return Array.from(groups.values())
+      .filter((g) => g.length > 1)
+      .map((g) => g.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+  }, [entries]);
+
+  // Auto-select all duplicates EXCEPT the oldest in each group (keep the oldest = original)
+  const autoSelectDuplicates = () => {
+    const next = new Set<string>();
+    duplicateGroups.forEach((group) => {
+      group.slice(1).forEach((e) => next.add(e.id));
+    });
+    setSelectedIds(next);
+    setShowDuplicates(true);
+    if (next.size === 0) {
+      toast.info("No duplicates found");
+    } else {
+      toast.success(`${next.size} duplicate record${next.size === 1 ? "" : "s"} pre-selected (oldest kept)`);
+    }
+  };
+
   // Generate-tab handlers (unchanged behavior)
   const filteredStaff = verifiedStaff.filter(
     (s) =>
@@ -709,6 +788,30 @@ const AdminEntries = () => {
                 Refresh
               </Button>
               <Button
+                variant="outline"
+                size="sm"
+                onClick={autoSelectDuplicates}
+                disabled={loading}
+                title="Find duplicate records and pre-select extras for deletion"
+              >
+                <Copy className="w-4 h-4 mr-1" />
+                Find Duplicates
+                {duplicateGroups.length > 0 && (
+                  <Badge variant="destructive" className="ml-2 text-xs">
+                    {duplicateGroups.reduce((n, g) => n + g.length - 1, 0)}
+                  </Badge>
+                )}
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={selectedIds.size === 0 || deleting || bulkDownloading}
+                onClick={requestDeleteSelected}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Delete ({selectedIds.size})
+              </Button>
+              <Button
                 size="sm"
                 disabled={selectedIds.size === 0 || bulkDownloading}
                 onClick={handleBulkDownload}
@@ -787,6 +890,56 @@ const AdminEntries = () => {
                   </div>
                 ))}
               </div>
+            </Card>
+          )}
+
+          {/* Duplicates panel */}
+          {showDuplicates && (
+            <Card className="p-4 space-y-3 border-destructive/40">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Copy className="w-4 h-4 text-destructive" />
+                Duplicate Records
+                <Badge variant="destructive" className="text-xs">
+                  {duplicateGroups.length} group{duplicateGroups.length === 1 ? "" : "s"}
+                </Badge>
+                <span className="ml-auto text-xs text-muted-foreground font-normal">
+                  Oldest of each group is kept · extras pre-selected for deletion
+                </span>
+                <Button variant="ghost" size="sm" onClick={() => setShowDuplicates(false)} className="h-7">
+                  <X className="w-3 h-3 mr-1" /> Hide
+                </Button>
+              </div>
+              {duplicateGroups.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No duplicates detected.</p>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-auto">
+                  {duplicateGroups.map((group, idx) => (
+                    <div key={idx} className="rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                      <div className="font-medium text-sm mb-1">
+                        {group[0].full_name}
+                        <span className="text-muted-foreground font-normal">
+                          {" "}· {[group[0].role, group[0].department].filter(Boolean).join("-")}{" "}
+                          {group[0].state ? `· ${group[0].state}` : ""}
+                        </span>
+                        <Badge variant="outline" className="ml-2 text-[10px]">
+                          {group.length} copies
+                        </Badge>
+                      </div>
+                      <div className="space-y-0.5 text-muted-foreground">
+                        {group.map((e, i) => (
+                          <div key={e.id} className="flex items-center gap-2">
+                            <span className={i === 0 ? "text-accent font-medium" : "text-destructive"}>
+                              {i === 0 ? "KEEP" : "DELETE"}
+                            </span>
+                            <span>· {formatDateTime(e.created_at)}</span>
+                            <span>· {e.company}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
           )}
 
@@ -978,6 +1131,14 @@ const AdminEntries = () => {
                                 <Lock className="w-4 h-4 text-muted-foreground" />
                               )}
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => requestDeleteOne(entry)}
+                              title="Delete record"
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1053,6 +1214,54 @@ const AdminEntries = () => {
                 <AlertDialogCancel disabled={savingEdit}>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={confirmSaveEdit} disabled={savingEdit}>
                   {savingEdit ? "Saving…" : "Confirm & Save"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Confirm delete */}
+          <AlertDialog
+            open={deleteTargets.length > 0}
+            onOpenChange={(open) => !open && !deleting && setDeleteTargets([])}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Delete {deleteTargets.length === 1 ? "this record" : `${deleteTargets.length} records`}?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {deleteTargets.length === 1 ? (
+                    <>
+                      This will permanently delete the generated ID for{" "}
+                      <strong>{deleteTargets[0]?.full_name}</strong>. This action cannot be undone.
+                    </>
+                  ) : (
+                    <>
+                      This will permanently delete{" "}
+                      <strong>{deleteTargets.length}</strong> staff records, including their generated
+                      ID metadata. This action cannot be undone.
+                    </>
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {deleteTargets.length > 1 && deleteTargets.length <= 20 && (
+                <div className="max-h-40 overflow-auto text-xs text-muted-foreground border rounded-md p-2 bg-muted/30 space-y-1">
+                  {deleteTargets.map((t) => (
+                    <div key={t.id}>
+                      • {t.full_name} — {[t.role, t.department].filter(Boolean).join("-")}{" "}
+                      {t.state ? `· ${t.state}` : ""}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deleting ? "Deleting…" : "Confirm Delete"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

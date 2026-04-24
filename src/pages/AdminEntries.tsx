@@ -568,6 +568,77 @@ const AdminEntries = () => {
     fetchEntries();
   };
 
+  // Delete handlers
+  const requestDeleteOne = (entry: StaffEntry) => {
+    setDeleteTargets([entry]);
+  };
+
+  const requestDeleteSelected = () => {
+    const targets = entries.filter((e) => selectedIds.has(e.id));
+    if (targets.length === 0) {
+      toast.error("Select at least one record");
+      return;
+    }
+    setDeleteTargets(targets);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTargets.length === 0) return;
+    setDeleting(true);
+    const ids = deleteTargets.map((t) => t.id);
+    const { error } = await supabase.from("staff_entries").delete().in("id", ids);
+    setDeleting(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      deleteTargets.length === 1
+        ? `Deleted ${deleteTargets[0].full_name}`
+        : `Deleted ${deleteTargets.length} records`
+    );
+    // Clear selection of deleted ids
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
+    setDeleteTargets([]);
+    fetchEntries();
+  };
+
+  // Duplicate detection: same normalized full_name + role + department + state
+  const duplicateGroups = useMemo(() => {
+    const norm = (s: string | null | undefined) => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
+    const groups = new Map<string, StaffEntry[]>();
+    entries.forEach((e) => {
+      const key = `${norm(e.full_name)}|${norm(e.role)}|${norm(e.department)}|${norm(e.state)}`;
+      if (!key.replace(/\|/g, "").trim()) return;
+      const arr = groups.get(key) || [];
+      arr.push(e);
+      groups.set(key, arr);
+    });
+    return Array.from(groups.values())
+      .filter((g) => g.length > 1)
+      .map((g) => g.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+  }, [entries]);
+
+  // Auto-select all duplicates EXCEPT the oldest in each group (keep the oldest = original)
+  const autoSelectDuplicates = () => {
+    const next = new Set<string>();
+    duplicateGroups.forEach((group) => {
+      group.slice(1).forEach((e) => next.add(e.id));
+    });
+    setSelectedIds(next);
+    setShowDuplicates(true);
+    if (next.size === 0) {
+      toast.info("No duplicates found");
+    } else {
+      toast.success(`${next.size} duplicate record${next.size === 1 ? "" : "s"} pre-selected (oldest kept)`);
+    }
+  };
+
   // Generate-tab handlers (unchanged behavior)
   const filteredStaff = verifiedStaff.filter(
     (s) =>

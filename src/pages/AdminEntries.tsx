@@ -893,6 +893,56 @@ const AdminEntries = () => {
             </Card>
           )}
 
+          {/* Duplicates panel */}
+          {showDuplicates && (
+            <Card className="p-4 space-y-3 border-destructive/40">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Copy className="w-4 h-4 text-destructive" />
+                Duplicate Records
+                <Badge variant="destructive" className="text-xs">
+                  {duplicateGroups.length} group{duplicateGroups.length === 1 ? "" : "s"}
+                </Badge>
+                <span className="ml-auto text-xs text-muted-foreground font-normal">
+                  Oldest of each group is kept · extras pre-selected for deletion
+                </span>
+                <Button variant="ghost" size="sm" onClick={() => setShowDuplicates(false)} className="h-7">
+                  <X className="w-3 h-3 mr-1" /> Hide
+                </Button>
+              </div>
+              {duplicateGroups.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No duplicates detected.</p>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-auto">
+                  {duplicateGroups.map((group, idx) => (
+                    <div key={idx} className="rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                      <div className="font-medium text-sm mb-1">
+                        {group[0].full_name}
+                        <span className="text-muted-foreground font-normal">
+                          {" "}· {[group[0].role, group[0].department].filter(Boolean).join("-")}{" "}
+                          {group[0].state ? `· ${group[0].state}` : ""}
+                        </span>
+                        <Badge variant="outline" className="ml-2 text-[10px]">
+                          {group.length} copies
+                        </Badge>
+                      </div>
+                      <div className="space-y-0.5 text-muted-foreground">
+                        {group.map((e, i) => (
+                          <div key={e.id} className="flex items-center gap-2">
+                            <span className={i === 0 ? "text-accent font-medium" : "text-destructive"}>
+                              {i === 0 ? "KEEP" : "DELETE"}
+                            </span>
+                            <span>· {formatDateTime(e.created_at)}</span>
+                            <span>· {e.company}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+
           {/* Filter bar */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">

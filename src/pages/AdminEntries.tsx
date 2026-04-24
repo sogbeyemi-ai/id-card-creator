@@ -1218,6 +1218,54 @@ const AdminEntries = () => {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Confirm delete */}
+          <AlertDialog
+            open={deleteTargets.length > 0}
+            onOpenChange={(open) => !open && !deleting && setDeleteTargets([])}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Delete {deleteTargets.length === 1 ? "this record" : `${deleteTargets.length} records`}?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {deleteTargets.length === 1 ? (
+                    <>
+                      This will permanently delete the generated ID for{" "}
+                      <strong>{deleteTargets[0]?.full_name}</strong>. This action cannot be undone.
+                    </>
+                  ) : (
+                    <>
+                      This will permanently delete{" "}
+                      <strong>{deleteTargets.length}</strong> staff records, including their generated
+                      ID metadata. This action cannot be undone.
+                    </>
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {deleteTargets.length > 1 && deleteTargets.length <= 20 && (
+                <div className="max-h-40 overflow-auto text-xs text-muted-foreground border rounded-md p-2 bg-muted/30 space-y-1">
+                  {deleteTargets.map((t) => (
+                    <div key={t.id}>
+                      • {t.full_name} — {[t.role, t.department].filter(Boolean).join("-")}{" "}
+                      {t.state ? `· ${t.state}` : ""}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deleting ? "Deleting…" : "Confirm Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </>
       ) : (
         /* Admin Generate ID */

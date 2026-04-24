@@ -1131,6 +1131,14 @@ const AdminEntries = () => {
                                 <Lock className="w-4 h-4 text-muted-foreground" />
                               )}
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => requestDeleteOne(entry)}
+                              title="Delete record"
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>

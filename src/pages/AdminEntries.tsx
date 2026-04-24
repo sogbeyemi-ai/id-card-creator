@@ -608,7 +608,8 @@ const AdminEntries = () => {
     fetchEntries();
   };
 
-  // Duplicate detection: same normalized full_name + role + department + state
+  // Duplicate detection: same normalized full_name + role + department + state.
+  // Each group is sorted NEWEST → OLDEST so group[0] is the latest (kept) and the rest are deletion candidates.
   const duplicateGroups = useMemo(() => {
     const norm = (s: string | null | undefined) => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
     const groups = new Map<string, StaffEntry[]>();
@@ -621,10 +622,10 @@ const AdminEntries = () => {
     });
     return Array.from(groups.values())
       .filter((g) => g.length > 1)
-      .map((g) => g.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+      .map((g) => g.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
   }, [entries]);
 
-  // Auto-select all duplicates EXCEPT the oldest in each group (keep the oldest = original)
+  // Auto-select all duplicates EXCEPT the latest in each group (keep newest, delete older copies)
   const autoSelectDuplicates = () => {
     const next = new Set<string>();
     duplicateGroups.forEach((group) => {
@@ -635,7 +636,7 @@ const AdminEntries = () => {
     if (next.size === 0) {
       toast.info("No duplicates found");
     } else {
-      toast.success(`${next.size} duplicate record${next.size === 1 ? "" : "s"} pre-selected (oldest kept)`);
+      toast.success(`${next.size} older duplicate${next.size === 1 ? "" : "s"} pre-selected (latest kept)`);
     }
   };
 

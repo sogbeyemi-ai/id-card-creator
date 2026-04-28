@@ -66,12 +66,36 @@ const Index = () => {
         return;
       }
 
-      const fileExt = data.photo.name.split(".").pop();
-      const fileName = `${crypto.randomUUID()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from("staff-photos")
-        .upload(fileName, data.photo);
-      if (uploadError) throw uploadError;
+      // Derive a safe file extension. iPhone HEIC, screenshots, and camera
+      // captures sometimes arrive without a usable extension — fall back to
+      // the MIME type, then to "jpg" as a last resort.
+      const rawExt = data.photo.name.includes(".")
+        ? data.photo.name.split(".").pop()?.toLowerCase()
+        : "";
+      const mimeExt = data.photo.type?.split("/")?.[1]?.toLowerCase();
+      const safeExt = (rawExt && /^[a-z0-9]{2,5}$/.test(rawExt) ? rawExt : mimeExt) || "jpg";
+      const fileName = `${crypto.randomUUID()}.${safeExt}`;
+
+      // Retry the upload up to 2x — most "Failed to generate" reports come
+      // from a single dropped packet on mobile networks during upload.
+      let uploadError: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { error } = await supabase.storage
+          .from("staff-photos")
+          .upload(fileName, data.photo, {
+            contentType: data.photo.type || `image/${safeExt}`,
+            upsert: false,
+          });
+        if (!error) { uploadError = null; break; }
+        uploadError = error;
+        await new Promise((r) => setTimeout(r, 600));
+      }
+      if (uploadError) {
+        throw new Error(
+          `Photo upload failed (${uploadError.message || "network error"}). ` +
+          `Please check your internet connection and try a smaller photo (under 5 MB, JPG or PNG).`
+        );
+      }
 
       const { data: urlData } = supabase.storage
         .from("staff-photos")

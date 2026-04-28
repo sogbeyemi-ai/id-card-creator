@@ -128,7 +128,9 @@ const Index = () => {
 
       toast.success("ID Card generated successfully!");
     } catch (error: any) {
-      toast.error("Failed to generate ID card: " + error.message);
+      const msg = error?.message || error?.error_description || "Unknown error. Please try again.";
+      toast.error(msg, { duration: 6000 });
+      console.error("ID generation failed:", error);
     } finally {
       setIsSubmitting(false);
     }

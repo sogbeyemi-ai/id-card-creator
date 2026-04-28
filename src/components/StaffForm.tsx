@@ -336,17 +336,12 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
           <Label htmlFor="roleDepartment" className="flex items-center gap-2 text-sm font-medium">
             <Briefcase className="w-4 h-4 text-accent" />
             Role - Department <span className="text-destructive">*</span>
-            {autoFilled && !departmentMissing && lookup.confidence === "exact" && (
+            {lockRoleDept && (
               <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
-                <CheckCircle2 className="w-3 h-3" /> Auto-filled · Exact
+                <CheckCircle2 className="w-3 h-3" /> Auto-filled & locked
               </span>
             )}
-            {autoFilled && !departmentMissing && lookup.confidence === "high" && !isAmbiguous && (
-              <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
-                <CheckCircle2 className="w-3 h-3" /> Auto-filled · High confidence
-              </span>
-            )}
-            {isAmbiguous && (
+            {!lockRoleDept && isAmbiguous && (
               <span className="ml-auto inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
                 ⚠ Low confidence — please confirm
               </span>

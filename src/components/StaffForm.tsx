@@ -64,9 +64,9 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
     (chosenStaffId && lookup.candidates.find((c) => c.record.id === chosenStaffId)?.record) ||
     lookup.match;
 
-  // Auto-fill role-department when a verified record is found.
-  // For ambiguous matches we still pre-fill from the best candidate but flag
-  // it as low confidence so the user can confirm or pick the correct staff.
+  // Auto-fill role-department instantly when a verified record is found.
+  // STRICT MODE: if the DB has BOTH role and department, we always overwrite
+  // the field and lock it — users cannot bypass by typing first.
   useEffect(() => {
     if (lookup.status === "idle" || lookup.status === "not_found") {
       setAutoFilled(false);
@@ -76,21 +76,23 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
     }
     if (lookup.status === "searching") return;
     if (!effectiveMatch) return;
-    if (roleDeptManuallyEdited) return;
 
     const role = (effectiveMatch.role || "").trim().toUpperCase();
     const dept = (effectiveMatch.department || "").trim().toUpperCase();
 
     if (role && dept) {
-      setFormData((prev) =>
-        prev.roleDepartment === `${role}-${dept}` ? prev : { ...prev, roleDepartment: `${role}-${dept}` }
-      );
+      const target = `${role}-${dept}`;
+      // Always force the DB value — strict lock, no manual override allowed
+      setFormData((prev) => (prev.roleDepartment === target ? prev : { ...prev, roleDepartment: target }));
       setAutoFilled(true);
       setDepartmentMissing(false);
+      setRoleDeptManuallyEdited(false);
     } else if (role && !dept) {
-      setFormData((prev) =>
-        prev.roleDepartment === `${role}-` ? prev : { ...prev, roleDepartment: `${role}-` }
-      );
+      // Role exists but department missing — prefill role, allow user to type department
+      setFormData((prev) => {
+        if (roleDeptManuallyEdited && prev.roleDepartment.startsWith(`${role}-`)) return prev;
+        return prev.roleDepartment === `${role}-` ? prev : { ...prev, roleDepartment: `${role}-` };
+      });
       setAutoFilled(true);
       setDepartmentMissing(true);
     } else if (dept && !role) {
@@ -106,11 +108,16 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
     setFormError(null);
   }, [lookup.status, effectiveMatch, roleDeptManuallyEdited]);
 
-  // Lock editing only when confidence is high/exact AND no ambiguity.
+  // STRICT LOCK: whenever DB has both role and department for the matched
+  // record, the field is read-only — regardless of confidence. Disambiguation
+  // picker is the ONLY way to change which record is used.
   const isAmbiguous = lookup.status === "ambiguous";
-  const isHighConfidence =
-    lookup.confidence === "exact" || (lookup.confidence === "high" && !isAmbiguous);
-  const lockRoleDept = autoFilled && !departmentMissing && isHighConfidence && !roleDeptManuallyEdited;
+  const dbHasBoth = !!(
+    effectiveMatch &&
+    (effectiveMatch.role || "").trim() &&
+    (effectiveMatch.department || "").trim()
+  );
+  const lockRoleDept = autoFilled && dbHasBoth;
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

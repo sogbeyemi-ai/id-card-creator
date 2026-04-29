@@ -1055,7 +1055,7 @@ const AdminEntries = () => {
                                 variant={i === 0 ? "secondary" : "destructive"}
                                 className="text-[10px]"
                               >
-                                {i === 0 ? "LATEST" : `OLDER #${i}`}
+                                {i === 0 ? "LATEST · KEPT" : `OLDER #${i}`}
                               </Badge>
                               <span className="text-xs text-muted-foreground">
                                 {formatDateTime(e.created_at)} · {e.company}

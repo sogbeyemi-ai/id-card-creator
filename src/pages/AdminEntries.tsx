@@ -174,10 +174,27 @@ const AdminEntries = () => {
     if (data) setVerifiedStaff(data);
   };
 
+  const fetchTrash = async () => {
+    setTrashLoading(true);
+    const { data, error } = await supabase
+      .from("staff_entries")
+      .select("*")
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false });
+    if (error) toast.error(error.message);
+    else setTrashedEntries((data as StaffEntry[]) || []);
+    setTrashLoading(false);
+  };
+
   useEffect(() => {
     fetchEntries();
     fetchVerifiedStaff();
+    fetchTrash();
   }, []);
+
+  useEffect(() => {
+    if (tab === "trash") fetchTrash();
+  }, [tab]);
 
   const toggleDownloadLock = async (entry: StaffEntry) => {
     const newLocked = !entry.download_locked;

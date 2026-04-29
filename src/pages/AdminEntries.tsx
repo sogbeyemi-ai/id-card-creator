@@ -613,10 +613,21 @@ const AdminEntries = () => {
   };
 
   const requestDeleteSelected = () => {
-    const targets = entries.filter((e) => selectedIds.has(e.id));
+    const all = entries.filter((e) => selectedIds.has(e.id));
+    // Final safety net: strip out the latest copy of any duplicate group, even if
+    // somehow it ended up in the selection. Bulk delete must NEVER touch the latest.
+    const targets = all.filter((e) => !latestDuplicateIds.has(e.id));
+    const protectedCount = all.length - targets.length;
     if (targets.length === 0) {
-      toast.error("Select at least one record");
+      toast.error(
+        protectedCount > 0
+          ? "Only latest duplicate records were selected — these are protected. Use the row's Delete button to remove them individually."
+          : "Select at least one record"
+      );
       return;
+    }
+    if (protectedCount > 0) {
+      toast.info(`${protectedCount} latest duplicate record${protectedCount === 1 ? "" : "s"} skipped — only older copies will be deleted`);
     }
     setDeleteTargets(targets);
   };

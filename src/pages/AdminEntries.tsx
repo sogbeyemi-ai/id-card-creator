@@ -150,6 +150,7 @@ const AdminEntries = () => {
       const { data, error } = await supabase
         .from("staff_entries")
         .select("*")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .range(from, from + pageSize - 1);
       if (error) {

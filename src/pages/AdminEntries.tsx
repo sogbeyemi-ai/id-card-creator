@@ -609,7 +609,11 @@ const AdminEntries = () => {
     if (deleteTargets.length === 0) return;
     setDeleting(true);
     const ids = deleteTargets.map((t) => t.id);
-    const { error } = await supabase.from("staff_entries").delete().in("id", ids);
+    // Soft delete — moves to Trash, recoverable
+    const { error } = await supabase
+      .from("staff_entries")
+      .update({ deleted_at: new Date().toISOString() })
+      .in("id", ids);
     setDeleting(false);
 
     if (error) {
@@ -618,10 +622,9 @@ const AdminEntries = () => {
     }
     toast.success(
       deleteTargets.length === 1
-        ? `Deleted ${deleteTargets[0].full_name}`
-        : `Deleted ${deleteTargets.length} records`
+        ? `Moved ${deleteTargets[0].full_name} to Trash`
+        : `Moved ${deleteTargets.length} records to Trash`
     );
-    // Clear selection of deleted ids
     setSelectedIds((prev) => {
       const next = new Set(prev);
       ids.forEach((id) => next.delete(id));
@@ -629,6 +632,49 @@ const AdminEntries = () => {
     });
     setDeleteTargets([]);
     fetchEntries();
+    fetchTrash();
+  };
+
+  const confirmRestore = async () => {
+    if (restoreTargets.length === 0) return;
+    setTrashActionLoading(true);
+    const ids = restoreTargets.map((t) => t.id);
+    const { error } = await supabase
+      .from("staff_entries")
+      .update({ deleted_at: null })
+      .in("id", ids);
+    setTrashActionLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      restoreTargets.length === 1
+        ? `Restored ${restoreTargets[0].full_name}`
+        : `Restored ${restoreTargets.length} records`
+    );
+    setRestoreTargets([]);
+    fetchEntries();
+    fetchTrash();
+  };
+
+  const confirmPurge = async () => {
+    if (purgeTargets.length === 0) return;
+    setTrashActionLoading(true);
+    const ids = purgeTargets.map((t) => t.id);
+    const { error } = await supabase.from("staff_entries").delete().in("id", ids);
+    setTrashActionLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      purgeTargets.length === 1
+        ? `Permanently deleted ${purgeTargets[0].full_name}`
+        : `Permanently deleted ${purgeTargets.length} records`
+    );
+    setPurgeTargets([]);
+    fetchTrash();
   };
 
   // Duplicate detection: same normalized full_name + role + department + state.

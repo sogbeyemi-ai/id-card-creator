@@ -76,8 +76,13 @@ const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|
 
 const AdminEntries = () => {
   const [entries, setEntries] = useState<StaffEntry[]>([]);
+  const [trashedEntries, setTrashedEntries] = useState<StaffEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"entries" | "generate">("entries");
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [tab, setTab] = useState<"entries" | "generate" | "trash">("entries");
+  const [restoreTargets, setRestoreTargets] = useState<StaffEntry[]>([]);
+  const [purgeTargets, setPurgeTargets] = useState<StaffEntry[]>([]);
+  const [trashActionLoading, setTrashActionLoading] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");

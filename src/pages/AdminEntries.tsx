@@ -695,10 +695,20 @@ const AdminEntries = () => {
       .map((g) => g.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
   }, [entries]);
 
+  // Hard-protected set: the LATEST entry of every duplicate group can never be deleted
+  // via bulk actions or accidental selection. Admins must use single-row "Delete" to
+  // remove a latest record explicitly.
+  const latestDuplicateIds = useMemo(() => {
+    const s = new Set<string>();
+    duplicateGroups.forEach((g) => g[0] && s.add(g[0].id));
+    return s;
+  }, [duplicateGroups]);
+
   // Auto-select all duplicates EXCEPT the latest in each group (keep newest, delete older copies)
   const autoSelectDuplicates = () => {
     const next = new Set<string>();
     duplicateGroups.forEach((group) => {
+      // Skip index 0 (latest). Only older copies are pre-selected.
       group.slice(1).forEach((e) => next.add(e.id));
     });
     setSelectedIds(next);
@@ -706,7 +716,7 @@ const AdminEntries = () => {
     if (next.size === 0) {
       toast.info("No duplicates found");
     } else {
-      toast.success(`${next.size} older duplicate${next.size === 1 ? "" : "s"} pre-selected (latest kept)`);
+      toast.success(`${next.size} older duplicate${next.size === 1 ? "" : "s"} pre-selected · latest of each group is protected`);
     }
   };
 

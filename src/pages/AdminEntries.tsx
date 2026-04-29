@@ -1346,19 +1346,16 @@ const AdminEntries = () => {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  Delete {deleteTargets.length === 1 ? "this record" : `${deleteTargets.length} records`}?
+                  Move {deleteTargets.length === 1 ? "this record" : `${deleteTargets.length} records`} to Trash?
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {deleteTargets.length === 1 ? (
                     <>
-                      This will permanently delete the generated ID for{" "}
-                      <strong>{deleteTargets[0]?.full_name}</strong>. This action cannot be undone.
+                      The generated ID for <strong>{deleteTargets[0]?.full_name}</strong> will be moved to Trash. You can restore it later from the Trash tab.
                     </>
                   ) : (
                     <>
-                      This will permanently delete{" "}
-                      <strong>{deleteTargets.length}</strong> staff records, including their generated
-                      ID metadata. This action cannot be undone.
+                      <strong>{deleteTargets.length}</strong> staff records will be moved to Trash. You can restore them later from the Trash tab.
                     </>
                   )}
                 </AlertDialogDescription>
@@ -1380,7 +1377,7 @@ const AdminEntries = () => {
                   disabled={deleting}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
-                  {deleting ? "Deleting…" : "Confirm Delete"}
+                  {deleting ? "Moving…" : "Move to Trash"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

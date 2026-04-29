@@ -1559,6 +1559,130 @@ const AdminEntries = () => {
             </div>
           )}
         </div>
+      ) : (
+        /* Trash */
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="font-display text-2xl font-bold flex items-center gap-2">
+                <Trash2 className="w-6 h-6" /> Trash
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {trashLoading
+                  ? "Loading…"
+                  : `${trashedEntries.length} deleted record${trashedEntries.length === 1 ? "" : "s"} — restore or permanently delete`}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={fetchTrash} disabled={trashLoading}>
+              <RefreshCw className={`w-4 h-4 mr-1 ${trashLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+
+          <Card className="p-0 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Role-Department</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead>Deleted</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {trashedEntries.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      Trash is empty.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  trashedEntries.map((e) => (
+                    <TableRow key={e.id}>
+                      <TableCell className="font-medium">{e.full_name}</TableCell>
+                      <TableCell className="text-sm">
+                        {[e.role, e.department].filter(Boolean).join("-")}
+                      </TableCell>
+                      <TableCell className="text-sm">{e.state || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {e.downloaded_at ? "" : ""}
+                        {(e as any).deleted_at
+                          ? new Date((e as any).deleted_at).toLocaleString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setRestoreTargets([e])}
+                          >
+                            <RefreshCw className="w-3 h-3 mr-1" /> Restore
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setPurgeTargets([e])}
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" /> Delete forever
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+
+          {/* Restore confirmation */}
+          <AlertDialog
+            open={restoreTargets.length > 0}
+            onOpenChange={(open) => !open && !trashActionLoading && setRestoreTargets([])}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Restore record?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {restoreTargets[0]?.full_name} will be restored to Generated IDs.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={trashActionLoading}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmRestore} disabled={trashActionLoading}>
+                  {trashActionLoading ? "Restoring…" : "Restore"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Permanent purge */}
+          <AlertDialog
+            open={purgeTargets.length > 0}
+            onOpenChange={(open) => !open && !trashActionLoading && setPurgeTargets([])}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Permanently delete?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete <strong>{purgeTargets[0]?.full_name}</strong>. This action
+                  cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={trashActionLoading}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={confirmPurge}
+                  disabled={trashActionLoading}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {trashActionLoading ? "Deleting…" : "Delete forever"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       )}
     </div>
   );

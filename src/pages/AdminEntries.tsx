@@ -61,6 +61,7 @@ interface StaffEntry {
   created_at: string;
   downloaded_at: string | null;
   photo_url: string;
+  deleted_at?: string | null;
 }
 
 interface VerifiedStaff {
@@ -76,8 +77,13 @@ const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|
 
 const AdminEntries = () => {
   const [entries, setEntries] = useState<StaffEntry[]>([]);
+  const [trashedEntries, setTrashedEntries] = useState<StaffEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"entries" | "generate">("entries");
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [tab, setTab] = useState<"entries" | "generate" | "trash">("entries");
+  const [restoreTargets, setRestoreTargets] = useState<StaffEntry[]>([]);
+  const [purgeTargets, setPurgeTargets] = useState<StaffEntry[]>([]);
+  const [trashActionLoading, setTrashActionLoading] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -145,6 +151,7 @@ const AdminEntries = () => {
       const { data, error } = await supabase
         .from("staff_entries")
         .select("*")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .range(from, from + pageSize - 1);
       if (error) {
@@ -168,10 +175,27 @@ const AdminEntries = () => {
     if (data) setVerifiedStaff(data);
   };
 
+  const fetchTrash = async () => {
+    setTrashLoading(true);
+    const { data, error } = await supabase
+      .from("staff_entries")
+      .select("*")
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false });
+    if (error) toast.error(error.message);
+    else setTrashedEntries((data as StaffEntry[]) || []);
+    setTrashLoading(false);
+  };
+
   useEffect(() => {
     fetchEntries();
     fetchVerifiedStaff();
+    fetchTrash();
   }, []);
+
+  useEffect(() => {
+    if (tab === "trash") fetchTrash();
+  }, [tab]);
 
   const toggleDownloadLock = async (entry: StaffEntry) => {
     const newLocked = !entry.download_locked;
@@ -586,7 +610,11 @@ const AdminEntries = () => {
     if (deleteTargets.length === 0) return;
     setDeleting(true);
     const ids = deleteTargets.map((t) => t.id);
-    const { error } = await supabase.from("staff_entries").delete().in("id", ids);
+    // Soft delete — moves to Trash, recoverable
+    const { error } = await supabase
+      .from("staff_entries")
+      .update({ deleted_at: new Date().toISOString() })
+      .in("id", ids);
     setDeleting(false);
 
     if (error) {
@@ -595,10 +623,9 @@ const AdminEntries = () => {
     }
     toast.success(
       deleteTargets.length === 1
-        ? `Deleted ${deleteTargets[0].full_name}`
-        : `Deleted ${deleteTargets.length} records`
+        ? `Moved ${deleteTargets[0].full_name} to Trash`
+        : `Moved ${deleteTargets.length} records to Trash`
     );
-    // Clear selection of deleted ids
     setSelectedIds((prev) => {
       const next = new Set(prev);
       ids.forEach((id) => next.delete(id));
@@ -606,6 +633,49 @@ const AdminEntries = () => {
     });
     setDeleteTargets([]);
     fetchEntries();
+    fetchTrash();
+  };
+
+  const confirmRestore = async () => {
+    if (restoreTargets.length === 0) return;
+    setTrashActionLoading(true);
+    const ids = restoreTargets.map((t) => t.id);
+    const { error } = await supabase
+      .from("staff_entries")
+      .update({ deleted_at: null })
+      .in("id", ids);
+    setTrashActionLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      restoreTargets.length === 1
+        ? `Restored ${restoreTargets[0].full_name}`
+        : `Restored ${restoreTargets.length} records`
+    );
+    setRestoreTargets([]);
+    fetchEntries();
+    fetchTrash();
+  };
+
+  const confirmPurge = async () => {
+    if (purgeTargets.length === 0) return;
+    setTrashActionLoading(true);
+    const ids = purgeTargets.map((t) => t.id);
+    const { error } = await supabase.from("staff_entries").delete().in("id", ids);
+    setTrashActionLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      purgeTargets.length === 1
+        ? `Permanently deleted ${purgeTargets[0].full_name}`
+        : `Permanently deleted ${purgeTargets.length} records`
+    );
+    setPurgeTargets([]);
+    fetchTrash();
   };
 
   // Duplicate detection: same normalized full_name + role + department + state.
@@ -767,6 +837,17 @@ const AdminEntries = () => {
           className={tab === "generate" ? "bg-accent text-accent-foreground" : ""}
         >
           <CreditCard className="w-4 h-4 mr-1" /> Generate ID
+        </Button>
+        <Button
+          variant={tab === "trash" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setTab("trash")}
+          className={tab === "trash" ? "bg-accent text-accent-foreground" : ""}
+        >
+          <Trash2 className="w-4 h-4 mr-1" /> Trash
+          {trashedEntries.length > 0 && (
+            <Badge variant="secondary" className="ml-2">{trashedEntries.length}</Badge>
+          )}
         </Button>
       </div>
 
@@ -1266,19 +1347,16 @@ const AdminEntries = () => {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  Delete {deleteTargets.length === 1 ? "this record" : `${deleteTargets.length} records`}?
+                  Move {deleteTargets.length === 1 ? "this record" : `${deleteTargets.length} records`} to Trash?
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {deleteTargets.length === 1 ? (
                     <>
-                      This will permanently delete the generated ID for{" "}
-                      <strong>{deleteTargets[0]?.full_name}</strong>. This action cannot be undone.
+                      The generated ID for <strong>{deleteTargets[0]?.full_name}</strong> will be moved to Trash. You can restore it later from the Trash tab.
                     </>
                   ) : (
                     <>
-                      This will permanently delete{" "}
-                      <strong>{deleteTargets.length}</strong> staff records, including their generated
-                      ID metadata. This action cannot be undone.
+                      <strong>{deleteTargets.length}</strong> staff records will be moved to Trash. You can restore them later from the Trash tab.
                     </>
                   )}
                 </AlertDialogDescription>
@@ -1300,13 +1378,13 @@ const AdminEntries = () => {
                   disabled={deleting}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
-                  {deleting ? "Deleting…" : "Confirm Delete"}
+                  {deleting ? "Moving…" : "Move to Trash"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
         </>
-      ) : (
+      ) : tab === "generate" ? (
         /* Admin Generate ID */
         <div className="space-y-6 max-w-4xl">
           <h1 className="font-display text-2xl font-bold">Generate ID Card (Admin)</h1>
@@ -1481,6 +1559,130 @@ const AdminEntries = () => {
               </div>
             </div>
           )}
+        </div>
+      ) : (
+        /* Trash */
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="font-display text-2xl font-bold flex items-center gap-2">
+                <Trash2 className="w-6 h-6" /> Trash
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {trashLoading
+                  ? "Loading…"
+                  : `${trashedEntries.length} deleted record${trashedEntries.length === 1 ? "" : "s"} — restore or permanently delete`}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={fetchTrash} disabled={trashLoading}>
+              <RefreshCw className={`w-4 h-4 mr-1 ${trashLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+
+          <Card className="p-0 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Role-Department</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead>Deleted</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {trashedEntries.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      Trash is empty.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  trashedEntries.map((e) => (
+                    <TableRow key={e.id}>
+                      <TableCell className="font-medium">{e.full_name}</TableCell>
+                      <TableCell className="text-sm">
+                        {[e.role, e.department].filter(Boolean).join("-")}
+                      </TableCell>
+                      <TableCell className="text-sm">{e.state || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {e.downloaded_at ? "" : ""}
+                        {(e as any).deleted_at
+                          ? new Date((e as any).deleted_at).toLocaleString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setRestoreTargets([e])}
+                          >
+                            <RefreshCw className="w-3 h-3 mr-1" /> Restore
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setPurgeTargets([e])}
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" /> Delete forever
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+
+          {/* Restore confirmation */}
+          <AlertDialog
+            open={restoreTargets.length > 0}
+            onOpenChange={(open) => !open && !trashActionLoading && setRestoreTargets([])}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Restore record?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {restoreTargets[0]?.full_name} will be restored to Generated IDs.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={trashActionLoading}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmRestore} disabled={trashActionLoading}>
+                  {trashActionLoading ? "Restoring…" : "Restore"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Permanent purge */}
+          <AlertDialog
+            open={purgeTargets.length > 0}
+            onOpenChange={(open) => !open && !trashActionLoading && setPurgeTargets([])}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Permanently delete?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete <strong>{purgeTargets[0]?.full_name}</strong>. This action
+                  cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={trashActionLoading}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={confirmPurge}
+                  disabled={trashActionLoading}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {trashActionLoading ? "Deleting…" : "Delete forever"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
     </div>

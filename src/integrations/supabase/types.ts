@@ -74,6 +74,7 @@ export type Database = {
         Row: {
           company: Database["public"]["Enums"]["company_template"]
           created_at: string
+          deleted_at: string | null
           department: string
           download_count: number
           download_locked: boolean
@@ -89,6 +90,7 @@ export type Database = {
         Insert: {
           company: Database["public"]["Enums"]["company_template"]
           created_at?: string
+          deleted_at?: string | null
           department: string
           download_count?: number
           download_locked?: boolean
@@ -104,6 +106,7 @@ export type Database = {
         Update: {
           company?: Database["public"]["Enums"]["company_template"]
           created_at?: string
+          deleted_at?: string | null
           department?: string
           download_count?: number
           download_locked?: boolean

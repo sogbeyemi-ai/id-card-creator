@@ -270,12 +270,27 @@ const AdminEntries = () => {
       setSelectedIds(next);
     } else {
       const next = new Set(selectedIds);
-      filteredEntries.forEach((e) => next.add(e.id));
+      let skipped = 0;
+      filteredEntries.forEach((e) => {
+        // Never auto-include the latest copy of a duplicate group
+        if (latestDuplicateIds.has(e.id)) {
+          skipped++;
+          return;
+        }
+        next.add(e.id);
+      });
       setSelectedIds(next);
+      if (skipped > 0) {
+        toast.info(`${skipped} latest duplicate record${skipped === 1 ? " was" : "s were"} kept safe and not selected`);
+      }
     }
   };
 
   const toggleSelect = (id: string) => {
+    if (latestDuplicateIds.has(id) && !selectedIds.has(id)) {
+      toast.warning("This is the LATEST copy of a duplicate. Use the row's Delete button if you really want to remove it.");
+      return;
+    }
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id);
     else next.add(id);
@@ -598,10 +613,21 @@ const AdminEntries = () => {
   };
 
   const requestDeleteSelected = () => {
-    const targets = entries.filter((e) => selectedIds.has(e.id));
+    const all = entries.filter((e) => selectedIds.has(e.id));
+    // Final safety net: strip out the latest copy of any duplicate group, even if
+    // somehow it ended up in the selection. Bulk delete must NEVER touch the latest.
+    const targets = all.filter((e) => !latestDuplicateIds.has(e.id));
+    const protectedCount = all.length - targets.length;
     if (targets.length === 0) {
-      toast.error("Select at least one record");
+      toast.error(
+        protectedCount > 0
+          ? "Only latest duplicate records were selected — these are protected. Use the row's Delete button to remove them individually."
+          : "Select at least one record"
+      );
       return;
+    }
+    if (protectedCount > 0) {
+      toast.info(`${protectedCount} latest duplicate record${protectedCount === 1 ? "" : "s"} skipped — only older copies will be deleted`);
     }
     setDeleteTargets(targets);
   };
@@ -695,10 +721,20 @@ const AdminEntries = () => {
       .map((g) => g.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
   }, [entries]);
 
+  // Hard-protected set: the LATEST entry of every duplicate group can never be deleted
+  // via bulk actions or accidental selection. Admins must use single-row "Delete" to
+  // remove a latest record explicitly.
+  const latestDuplicateIds = useMemo(() => {
+    const s = new Set<string>();
+    duplicateGroups.forEach((g) => g[0] && s.add(g[0].id));
+    return s;
+  }, [duplicateGroups]);
+
   // Auto-select all duplicates EXCEPT the latest in each group (keep newest, delete older copies)
   const autoSelectDuplicates = () => {
     const next = new Set<string>();
     duplicateGroups.forEach((group) => {
+      // Skip index 0 (latest). Only older copies are pre-selected.
       group.slice(1).forEach((e) => next.add(e.id));
     });
     setSelectedIds(next);
@@ -706,7 +742,7 @@ const AdminEntries = () => {
     if (next.size === 0) {
       toast.info("No duplicates found");
     } else {
-      toast.success(`${next.size} older duplicate${next.size === 1 ? "" : "s"} pre-selected (latest kept)`);
+      toast.success(`${next.size} older duplicate${next.size === 1 ? "" : "s"} pre-selected · latest of each group is protected`);
     }
   };
 
@@ -1019,7 +1055,7 @@ const AdminEntries = () => {
                                 variant={i === 0 ? "secondary" : "destructive"}
                                 className="text-[10px]"
                               >
-                                {i === 0 ? "LATEST" : `OLDER #${i}`}
+                                {i === 0 ? "LATEST · KEPT" : `OLDER #${i}`}
                               </Badge>
                               <span className="text-xs text-muted-foreground">
                                 {formatDateTime(e.created_at)} · {e.company}

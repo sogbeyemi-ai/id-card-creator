@@ -837,6 +837,17 @@ const AdminEntries = () => {
         >
           <CreditCard className="w-4 h-4 mr-1" /> Generate ID
         </Button>
+        <Button
+          variant={tab === "trash" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setTab("trash")}
+          className={tab === "trash" ? "bg-accent text-accent-foreground" : ""}
+        >
+          <Trash2 className="w-4 h-4 mr-1" /> Trash
+          {trashedEntries.length > 0 && (
+            <Badge variant="secondary" className="ml-2">{trashedEntries.length}</Badge>
+          )}
+        </Button>
       </div>
 
       {tab === "entries" ? (

@@ -61,6 +61,7 @@ interface StaffEntry {
   created_at: string;
   downloaded_at: string | null;
   photo_url: string;
+  deleted_at?: string | null;
 }
 
 interface VerifiedStaff {

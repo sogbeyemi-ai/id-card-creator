@@ -270,12 +270,27 @@ const AdminEntries = () => {
       setSelectedIds(next);
     } else {
       const next = new Set(selectedIds);
-      filteredEntries.forEach((e) => next.add(e.id));
+      let skipped = 0;
+      filteredEntries.forEach((e) => {
+        // Never auto-include the latest copy of a duplicate group
+        if (latestDuplicateIds.has(e.id)) {
+          skipped++;
+          return;
+        }
+        next.add(e.id);
+      });
       setSelectedIds(next);
+      if (skipped > 0) {
+        toast.info(`${skipped} latest duplicate record${skipped === 1 ? " was" : "s were"} kept safe and not selected`);
+      }
     }
   };
 
   const toggleSelect = (id: string) => {
+    if (latestDuplicateIds.has(id) && !selectedIds.has(id)) {
+      toast.warning("This is the LATEST copy of a duplicate. Use the row's Delete button if you really want to remove it.");
+      return;
+    }
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id);
     else next.add(id);

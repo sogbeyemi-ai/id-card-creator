@@ -1383,7 +1383,7 @@ const AdminEntries = () => {
             </AlertDialogContent>
           </AlertDialog>
         </>
-      ) : (
+      ) : tab === "generate" ? (
         /* Admin Generate ID */
         <div className="space-y-6 max-w-4xl">
           <h1 className="font-display text-2xl font-bold">Generate ID Card (Admin)</h1>

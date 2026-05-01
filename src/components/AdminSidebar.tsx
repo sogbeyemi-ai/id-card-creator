@@ -1,4 +1,4 @@
-import { Upload, Users, CreditCard, LogOut, Home, ShieldCheck } from "lucide-react";
+import { Upload, Users, CreditCard, LogOut, Home, ShieldCheck, Building2 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";

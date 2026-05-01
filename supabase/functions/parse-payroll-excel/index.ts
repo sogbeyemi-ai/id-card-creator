@@ -54,17 +54,71 @@ Deno.serve(async (req) => {
       throw new Error('The "Payslip" sheet is empty. Add headings on the first row and one row per employee.');
     }
 
-    const mapping = (cycle.column_mapping || {}) as Record<string, string>;
+    // Auto-apply PROTEN default mapping when the cycle/client has no mapping yet.
+    // This matches the standard JOSEPDAM/PROTEN April 2026 workbook headers.
+    const PROTEN_DEFAULTS: Record<string, string> = {
+      staff_name: "EMPLOYEE NAME",
+      designation: "DESIGNATION",
+      working_days: "Working Days",
+      days_worked: "Days Worked",
+      month_income: "THIS MONTHLY GROSS",
+      month_gross: "MONTHLY GROSS",
+      basic: " Basic Salary",
+      housing: " Housing Allowance",
+      transport: " Transport Allowance",
+      other_allowance: " Utility",
+      performance: "PERFORMANCE ",
+      hazardous: "HARZADOUS",
+      overtime: "OVERTIME",
+      inlieu: "INLIEU",
+      deduction: "DEDUCTIONS",
+      final_gross_salary: "MONTH'S INCOME",
+      contributory_pension_deduction: "Monthly Employee Pension",
+      tax_payable: "Compiled Monthly Tax",
+      tax_percentage: "TAX%",
+      net_pay: "Net Pay",
+    };
+
+    let mapping = (cycle.column_mapping || {}) as Record<string, string>;
+    if (!mapping || Object.keys(mapping).filter((k) => mapping[k]).length === 0) {
+      mapping = PROTEN_DEFAULTS;
+    }
+
+    // Build a normalized lookup of actual headers so we can match even if the
+    // workbook has slightly different spacing/casing than the mapping uses.
+    const headerKeys = Object.keys(rows[0] || {});
+    const normalize = (s: string) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const headerByNorm = new Map<string, string>();
+    for (const h of headerKeys) headerByNorm.set(normalize(h), h);
+
+    const lookupCell = (row: Record<string, any>, header: string) => {
+      if (header in row) return row[header];
+      const real = headerByNorm.get(normalize(header));
+      return real ? row[real] : undefined;
+    };
 
     // Clear previous rows for this cycle
     await admin.from("payroll_rows").delete().eq("cycle_id", cycle_id);
 
-    const inserts = rows.map((row) => {
+    const inserts = rows
+      .filter((row) => {
+        // Skip rows without an employee name (totals row, blank rows)
+        const name = lookupCell(row, mapping.staff_name || "EMPLOYEE NAME");
+        return name && String(name).trim().length > 0;
+      })
+      .map((row) => {
       const data: Record<string, any> = {};
       for (const [fieldKey, excelCol] of Object.entries(mapping)) {
         if (!excelCol) continue;
-        const v = row[excelCol];
+        const v = lookupCell(row, excelCol);
         data[fieldKey] = v === undefined || v === null ? "" : v;
+      }
+      // Format tax_percentage as "x.xx%" if numeric
+      if (data.tax_percentage !== "" && data.tax_percentage !== undefined) {
+        const tp = Number(data.tax_percentage);
+        if (Number.isFinite(tp)) {
+          data.tax_percentage = (tp <= 1 ? tp * 100 : tp).toFixed(2) + "%";
+        }
       }
       // Auto-derive totals if missing
       const num = (k: string) => Number(data[k]) || 0;

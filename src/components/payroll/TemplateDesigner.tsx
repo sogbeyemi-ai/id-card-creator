@@ -82,7 +82,7 @@ export function TemplateDesigner({ backgroundUrl, previewUrl, width, height, fie
           className="relative w-full border rounded overflow-hidden bg-muted select-none"
           style={{ paddingBottom: `${aspect * 100}%` }}
         >
-          <img src={backgroundUrl} alt="template" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+          <img src={displayUrl} alt="template" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
           {fields.map((f, i) => (
             <div
               key={i}

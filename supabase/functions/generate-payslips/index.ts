@@ -92,10 +92,26 @@ Deno.serve(async (req) => {
     let generated = 0;
     for (const row of rows) {
       try {
-        const pdfDoc = await PDFDocument.create();
-        const page = pdfDoc.addPage([tpl.width, tpl.height]);
-        const img = isPng ? await pdfDoc.embedPng(bgBytes) : await pdfDoc.embedJpg(bgBytes);
-        page.drawImage(img, { x: 0, y: 0, width: tpl.width, height: tpl.height });
+        let pdfDoc: PDFDocument;
+        let page: any;
+        let pageW: number;
+        let pageH: number;
+
+        if (isPdf && templatePdf) {
+          // Copy first page of the template PDF as the base
+          pdfDoc = await PDFDocument.create();
+          const [copied] = await pdfDoc.copyPages(templatePdf, [0]);
+          page = pdfDoc.addPage(copied);
+          pageW = tplPageWidth;
+          pageH = tplPageHeight;
+        } else {
+          pdfDoc = await PDFDocument.create();
+          pageW = tpl.width;
+          pageH = tpl.height;
+          page = pdfDoc.addPage([pageW, pageH]);
+          const img = isPng ? await pdfDoc.embedPng(bgBytes) : await pdfDoc.embedJpg(bgBytes);
+          page.drawImage(img, { x: 0, y: 0, width: pageW, height: pageH });
+        }
 
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -107,8 +123,8 @@ Deno.serve(async (req) => {
           const f = p.bold ? fontBold : font;
           const size = p.fontSize;
           const textWidth = f.widthOfTextAtSize(text, size);
-          let x = p.x * tpl.width;
-          const y = tpl.height - p.y * tpl.height - size; // pdf-lib origin is bottom-left
+          let x = p.x * pageW;
+          const y = pageH - p.y * pageH - size;
           if (p.align === "center") x -= textWidth / 2;
           if (p.align === "right") x -= textWidth;
           page.drawText(text, { x, y, size, font: f, color: rgb(0, 0, 0) });

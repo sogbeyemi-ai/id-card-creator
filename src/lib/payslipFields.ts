@@ -51,29 +51,33 @@ export const PAYSLIP_FIELDS: PayslipField[] = [
 
 export const PAYSLIP_FIELD_KEYS = PAYSLIP_FIELDS.map((f) => f.key);
 
-// Defaults for the JOSEPDAM/PROTEN structured layout — matches the headings
-// on the "Payslip" tab of the standard payroll Excel.
+// Defaults for the JOSEPDAM/PROTEN structured layout — matches the EXACT
+// headings on the "PAYSLIP" tab of the standard PROTEN payroll Excel.
+// (Note: some headers in the workbook contain leading spaces or trailing
+// spaces — those are preserved here so lookups succeed without trimming.)
 export const PROTEN_DEFAULT_MAPPING: Record<string, string> = {
-  staff_name: "Name",
-  designation: "Designation",
+  staff_name: "EMPLOYEE NAME",
+  designation: "DESIGNATION",
   working_days: "Working Days",
   days_worked: "Days Worked",
-  month_income: "Month's Income",
-  month_gross: "Month's Gross",
-  basic: "Basic",
-  housing: "Housing",
-  transport: "Transport",
-  other_allowance: "Other Allowance",
-  performance: "Performance",
-  hazardous: "Hazardous",
-  overtime: "Overtime",
-  inlieu: "Inlieu",
-  deduction: "Deduction",
-  final_gross_salary: "Final Gross Salary",
-  contributory_pension_deduction: "Contributory Pension Deduction",
-  tax_payable: "Tax Payable",
-  tax_percentage: "Tax Percentage",
-  net_pay: "Net Salary",
+  // The Excel uses MONTHLY GROSS for the contract gross and THIS MONTHLY
+  // GROSS for the actual amount earned this month (the highlight row).
+  month_income: "THIS MONTHLY GROSS",
+  month_gross: "MONTHLY GROSS",
+  basic: " Basic Salary",
+  housing: " Housing Allowance",
+  transport: " Transport Allowance",
+  other_allowance: " Utility",
+  performance: "PERFORMANCE ",
+  hazardous: "HARZADOUS",
+  overtime: "OVERTIME",
+  inlieu: "INLIEU",
+  deduction: "DEDUCTIONS",
+  final_gross_salary: "MONTH'S INCOME",
+  contributory_pension_deduction: "Monthly Employee Pension",
+  tax_payable: "Compiled Monthly Tax",
+  tax_percentage: "TAX%",
+  net_pay: "Net Pay",
 };
 
 // Ordered rows for the structured PROTEN payslip table.

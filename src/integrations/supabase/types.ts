@@ -94,6 +94,108 @@ export type Database = {
         }
         Relationships: []
       }
+      payroll_clients: {
+        Row: {
+          created_at: string
+          currency: string
+          default_column_mapping: Json
+          id: string
+          logo_url: string | null
+          name: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          default_column_mapping?: Json
+          id?: string
+          logo_url?: string | null
+          name: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          default_column_mapping?: Json
+          id?: string
+          logo_url?: string | null
+          name?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payroll_cycles: {
+        Row: {
+          client_id: string
+          column_mapping: Json
+          created_at: string
+          created_by: string | null
+          id: string
+          period_end: string | null
+          period_label: string
+          period_start: string | null
+          source_file_url: string | null
+          status: string
+          template_id: string | null
+          total_generated: number
+          total_rows: number
+          updated_at: string
+          zip_url: string | null
+        }
+        Insert: {
+          client_id: string
+          column_mapping?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          period_end?: string | null
+          period_label: string
+          period_start?: string | null
+          source_file_url?: string | null
+          status?: string
+          template_id?: string | null
+          total_generated?: number
+          total_rows?: number
+          updated_at?: string
+          zip_url?: string | null
+        }
+        Update: {
+          client_id?: string
+          column_mapping?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          period_end?: string | null
+          period_label?: string
+          period_start?: string | null
+          source_file_url?: string | null
+          status?: string
+          template_id?: string | null
+          total_generated?: number
+          total_rows?: number
+          updated_at?: string
+          zip_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_cycles_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payroll_items: {
         Row: {
           created_at: string
@@ -145,6 +247,56 @@ export type Database = {
           },
         ]
       }
+      payroll_rows: {
+        Row: {
+          created_at: string
+          cycle_id: string
+          data: Json
+          error_message: string | null
+          id: string
+          pdf_url: string | null
+          staff_email: string | null
+          staff_id_number: string | null
+          staff_name: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          cycle_id: string
+          data?: Json
+          error_message?: string | null
+          id?: string
+          pdf_url?: string | null
+          staff_email?: string | null
+          staff_id_number?: string | null
+          staff_name?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          cycle_id?: string
+          data?: Json
+          error_message?: string | null
+          id?: string
+          pdf_url?: string | null
+          staff_email?: string | null
+          staff_id_number?: string | null
+          staff_name?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_rows_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_cycles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payroll_runs: {
         Row: {
           created_at: string
@@ -183,6 +335,53 @@ export type Database = {
           total_net?: number
         }
         Relationships: []
+      }
+      payroll_templates: {
+        Row: {
+          background_url: string
+          client_id: string
+          created_at: string
+          field_layout: Json
+          height: number
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+          width: number
+        }
+        Insert: {
+          background_url: string
+          client_id: string
+          created_at?: string
+          field_layout?: Json
+          height?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+          width?: number
+        }
+        Update: {
+          background_url?: string
+          client_id?: string
+          created_at?: string
+          field_layout?: Json
+          height?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+          width?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {

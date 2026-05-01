@@ -11,6 +11,9 @@ import AdminDashboard from "./pages/AdminDashboard.tsx";
 import AdminUpload from "./pages/AdminUpload.tsx";
 import AdminEntries from "./pages/AdminEntries.tsx";
 import AdminUsers from "./pages/AdminUsers.tsx";
+import AdminClients from "./pages/AdminClients.tsx";
+import AdminClientDetail from "./pages/AdminClientDetail.tsx";
+import AdminCycleDetail from "./pages/AdminCycleDetail.tsx";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +31,9 @@ const App = () => (
             <Route path="upload" element={<AdminUpload />} />
             <Route path="entries" element={<AdminEntries />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="clients" element={<AdminClients />} />
+            <Route path="clients/:id" element={<AdminClientDetail />} />
+            <Route path="payroll/:id" element={<AdminCycleDetail />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

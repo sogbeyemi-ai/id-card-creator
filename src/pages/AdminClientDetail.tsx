@@ -57,6 +57,111 @@ export default function AdminClientDetail() {
       .eq("client_id", id)
       .order("created_at", { ascending: false });
     setCycles(cy || []);
+
+    const latest = (cy || [])[0] || null;
+    setActiveCycle(latest);
+    if (latest) {
+      const { data: rs } = await supabase
+        .from("payroll_rows")
+        .select("*")
+        .eq("cycle_id", latest.id)
+        .order("created_at");
+      setActiveRows(rs || []);
+    } else {
+      setActiveRows([]);
+    }
+  };
+
+  const ensureActiveCycle = async () => {
+    if (activeCycle) return activeCycle;
+    if (!id) return null;
+    const monthLabel = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase.from("payroll_cycles").insert({
+      client_id: id,
+      template_id: template?.id || null,
+      period_label: monthLabel,
+      column_mapping: columnMapping,
+      created_by: user?.id,
+    }).select().single();
+    if (error) { toast.error(error.message); return null; }
+    setActiveCycle(data);
+    return data;
+  };
+
+  const handleClientExcelUpload = async (file: File) => {
+    if (!id) return;
+    setUploading(true);
+    try {
+      const cycle = await ensureActiveCycle();
+      if (!cycle) return;
+      const path = `${cycle.id}/source_${Date.now()}_${file.name}`;
+      const { error: upErr } = await supabase.storage.from("payroll-templates").upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("payroll-templates").getPublicUrl(path);
+      const { error } = await supabase.from("payroll_cycles")
+        .update({ source_file_url: pub.publicUrl, status: "uploaded", column_mapping: columnMapping })
+        .eq("id", cycle.id);
+      if (error) throw error;
+      toast.success("Excel uploaded. Now click Parse.");
+      await load();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setUploading(false); }
+  };
+
+  const callFn = async (name: string, cycleId: string) => {
+    const { data, error } = await supabase.functions.invoke(name, { body: { cycle_id: cycleId } });
+    if (error) throw error;
+    if ((data as any)?.error) throw new Error((data as any).error);
+    return data;
+  };
+
+  const handleParse = async () => {
+    if (!activeCycle) return;
+    setParsing(true);
+    try { const d: any = await callFn("parse-payroll-excel", activeCycle.id); toast.success(`Parsed ${d.rows} staff rows`); load(); }
+    catch (e: any) { toast.error(e.message); }
+    finally { setParsing(false); }
+  };
+
+  const handleGenerate = async () => {
+    if (!activeCycle) return;
+    setGenerating(true);
+    try { const d: any = await callFn("generate-payslips", activeCycle.id); toast.success(`Generated ${d.generated}/${d.total} payslips`); load(); }
+    catch (e: any) { toast.error(e.message); }
+    finally { setGenerating(false); }
+  };
+
+  const handleZip = async () => {
+    if (!activeCycle) return;
+    setZipping(true);
+    try {
+      const d: any = await callFn("zip-payslips", activeCycle.id);
+      if (d.signed_url) { window.open(d.signed_url, "_blank"); toast.success("ZIP ready"); }
+    } catch (e: any) { toast.error(e.message); }
+    finally { setZipping(false); }
+  };
+
+  const previewPdf = async (path: string) => {
+    const { data, error } = await supabase.storage.from("payslips").createSignedUrl(path, 600);
+    if (error) { toast.error(error.message); return; }
+    window.open(data.signedUrl, "_blank");
+  };
+
+  const startNewMonth = async () => {
+    const label = prompt("Period label for the new payroll (e.g. November 2026):");
+    if (!label?.trim() || !id) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from("payroll_cycles").insert({
+      client_id: id,
+      template_id: template?.id || null,
+      period_label: label.trim(),
+      column_mapping: columnMapping,
+      created_by: user?.id,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("New payroll started");
+    load();
   };
 
   useEffect(() => { load(); }, [id]);

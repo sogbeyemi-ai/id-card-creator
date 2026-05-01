@@ -134,6 +134,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          pay_date: string | null
           period_end: string | null
           period_label: string
           period_start: string | null
@@ -151,6 +152,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          pay_date?: string | null
           period_end?: string | null
           period_label: string
           period_start?: string | null
@@ -168,6 +170,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          pay_date?: string | null
           period_end?: string | null
           period_label?: string
           period_start?: string | null
@@ -347,6 +350,7 @@ export type Database = {
           is_active: boolean
           name: string
           preview_url: string | null
+          template_kind: string
           updated_at: string
           width: number
         }
@@ -360,6 +364,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           preview_url?: string | null
+          template_kind?: string
           updated_at?: string
           width?: number
         }
@@ -373,6 +378,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           preview_url?: string | null
+          template_kind?: string
           updated_at?: string
           width?: number
         }

@@ -8,13 +8,15 @@ import { Trash2, Plus, Move } from "lucide-react";
 
 interface Props {
   backgroundUrl: string;
+  previewUrl?: string | null;
   width: number;
   height: number;
   fields: FieldPlacement[];
   onChange: (fields: FieldPlacement[]) => void;
 }
 
-export function TemplateDesigner({ backgroundUrl, width, height, fields, onChange }: Props) {
+export function TemplateDesigner({ backgroundUrl, previewUrl, width, height, fields, onChange }: Props) {
+  const displayUrl = previewUrl || backgroundUrl;
   const [selected, setSelected] = useState<number | null>(null);
   const [newKey, setNewKey] = useState<string>(PAYSLIP_FIELDS[0].key);
   const containerRef = useRef<HTMLDivElement>(null);

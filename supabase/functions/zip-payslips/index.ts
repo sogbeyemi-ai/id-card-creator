@@ -38,8 +38,9 @@ Deno.serve(async (req) => {
       if (!row.pdf_url) continue;
       const { data: blob, error } = await admin.storage.from("payslips").download(row.pdf_url);
       if (error || !blob) continue;
-      const safe = (row.staff_name || row.id).replace(/[^a-zA-Z0-9]+/g, "_");
-      zip.file(`${safe}.pdf`, await blob.arrayBuffer());
+      // Use the stored object name (already friendly: Client_Name_Month_Year_Payslip.pdf)
+      const baseName = String(row.pdf_url).split("/").pop() || `${row.id}.pdf`;
+      zip.file(baseName, await blob.arrayBuffer());
     }
 
     const zipBytes = await zip.generateAsync({ type: "uint8array" });

@@ -85,18 +85,67 @@ export default function AdminClientDetail() {
   const ensureActiveCycle = async () => {
     if (activeCycle) return activeCycle;
     if (!id) return null;
-    const monthLabel = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
+    const monthLabel = (periodLabel || "").trim() || new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase.from("payroll_cycles").insert({
       client_id: id,
       template_id: template?.id || null,
       period_label: monthLabel,
+      pay_date: payDate || null,
       column_mapping: columnMapping,
       created_by: user?.id,
     }).select().single();
     if (error) { toast.error(error.message); return null; }
     setActiveCycle(data);
     return data;
+  };
+
+  const saveCyclePeriod = async () => {
+    if (!activeCycle) {
+      const c = await ensureActiveCycle();
+      if (c) toast.success("Period saved");
+      return;
+    }
+    const { error } = await supabase.from("payroll_cycles").update({
+      period_label: periodLabel.trim() || activeCycle.period_label,
+      pay_date: payDate || null,
+    }).eq("id", activeCycle.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Period saved");
+    load();
+  };
+
+  const saveTemplateKind = async (kind: "coordinate" | "structured_proten") => {
+    if (!id) return;
+    setTemplateKind(kind);
+    setSavingTemplateKind(true);
+    try {
+      if (template) {
+        const { error } = await supabase.from("payroll_templates").update({ template_kind: kind }).eq("id", template.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("payroll_templates").insert({
+          client_id: id,
+          template_kind: kind,
+          background_url: "",
+          width: 595,
+          height: 842,
+          field_layout: [],
+        });
+        if (error) throw error;
+      }
+      toast.success("Template style saved");
+      load();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingTemplateKind(false);
+    }
+  };
+
+  const applyProtenDefaults = () => {
+    setColumnMapping({ ...PROTEN_DEFAULT_MAPPING });
+    toast.success("PROTEN defaults loaded — click Save Mapping");
   };
 
   const handleClientExcelUpload = async (file: File) => {

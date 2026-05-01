@@ -429,11 +429,14 @@ export default function AdminClientDetail() {
 
         <TabsContent value="cycles" className="space-y-4">
           <Card>
-            <CardHeader><CardTitle>New Payroll Cycle</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Past Payrolls</CardTitle>
+              <p className="text-xs text-muted-foreground">Each upload is saved here so you can revisit previous months.</p>
+            </CardHeader>
             <CardContent className="flex gap-2">
-              <Input placeholder="e.g. October 2026" value={newPeriod} onChange={(e) => setNewPeriod(e.target.value)} />
-              <Button onClick={createCycle} disabled={creatingCycle}>
-                <Plus className="w-4 h-4 mr-2" />{creatingCycle ? "Creating..." : "Create"}
+              <Input placeholder="Custom period label (optional)" value={newPeriod} onChange={(e) => setNewPeriod(e.target.value)} />
+              <Button onClick={createCycle} disabled={creatingCycle} variant="outline">
+                <Plus className="w-4 h-4 mr-2" />{creatingCycle ? "Creating..." : "Add period"}
               </Button>
             </CardContent>
           </Card>

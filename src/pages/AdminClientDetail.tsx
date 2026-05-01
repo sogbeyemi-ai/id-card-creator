@@ -26,6 +26,14 @@ export default function AdminClientDetail() {
   const [newPeriod, setNewPeriod] = useState("");
   const [creatingCycle, setCreatingCycle] = useState(false);
 
+  // Active (latest) cycle workflow state
+  const [activeCycle, setActiveCycle] = useState<any>(null);
+  const [activeRows, setActiveRows] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [parsing, setParsing] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [zipping, setZipping] = useState(false);
+
   const load = async () => {
     if (!id) return;
     const { data: c } = await supabase.from("payroll_clients").select("*").eq("id", id).maybeSingle();

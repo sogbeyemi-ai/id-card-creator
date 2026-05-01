@@ -30,6 +30,7 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
     { title: "Dashboard", url: "/admin/dashboard", icon: Home },
     { title: "Upload Staff Data", url: "/admin/upload", icon: Upload },
     { title: "Generated IDs", url: "/admin/entries", icon: CreditCard },
+    { title: "Payroll Clients", url: "/admin/clients", icon: Building2 },
     ...(isSuperAdmin
       ? [{ title: "Admin Users", url: "/admin/users", icon: Users }]
       : []),

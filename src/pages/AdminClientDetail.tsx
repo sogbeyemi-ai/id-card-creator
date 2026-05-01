@@ -54,6 +54,7 @@ export default function AdminClientDetail() {
       .maybeSingle();
     setTemplate(t);
     setFields((t?.field_layout as unknown as FieldPlacement[]) || []);
+    setTemplateKind(((t?.template_kind as any) || "coordinate") as "coordinate" | "structured_proten");
 
     const { data: cy } = await supabase
       .from("payroll_cycles")
@@ -65,6 +66,8 @@ export default function AdminClientDetail() {
     const latest = (cy || [])[0] || null;
     setActiveCycle(latest);
     if (latest) {
+      setPeriodLabel(latest.period_label || "");
+      setPayDate(latest.pay_date || "");
       const { data: rs } = await supabase
         .from("payroll_rows")
         .select("*")
@@ -72,6 +75,9 @@ export default function AdminClientDetail() {
         .order("created_at");
       setActiveRows(rs || []);
     } else {
+      const fallback = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
+      setPeriodLabel(fallback);
+      setPayDate("");
       setActiveRows([]);
     }
   };

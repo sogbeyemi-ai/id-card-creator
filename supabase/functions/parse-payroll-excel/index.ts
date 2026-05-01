@@ -36,7 +36,13 @@ Deno.serve(async (req) => {
     const fileRes = await fetch(cycle.source_file_url);
     const buf = new Uint8Array(await fileRes.arrayBuffer());
     const wb = XLSX.read(buf, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
+    // Prefer a sheet named "payslip" (case-insensitive); fall back to first sheet
+    const targetName =
+      wb.SheetNames.find((n) => n.trim().toLowerCase() === "payslip") ||
+      wb.SheetNames.find((n) => n.trim().toLowerCase().includes("payslip")) ||
+      wb.SheetNames[0];
+    console.log("Using sheet:", targetName, "of", wb.SheetNames);
+    const ws = wb.Sheets[targetName];
     const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: "" });
 
     const mapping = (cycle.column_mapping || {}) as Record<string, string>;

@@ -346,6 +346,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          preview_url: string | null
           updated_at: string
           width: number
         }
@@ -358,6 +359,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          preview_url?: string | null
           updated_at?: string
           width?: number
         }
@@ -370,6 +372,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          preview_url?: string | null
           updated_at?: string
           width?: number
         }

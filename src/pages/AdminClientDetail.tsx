@@ -166,40 +166,80 @@ export default function AdminClientDetail() {
 
   useEffect(() => { load(); }, [id]);
 
+  const renderPdfFirstPageToPng = async (file: File): Promise<{ blob: Blob; width: number; height: number }> => {
+    const pdfjs: any = await import("pdfjs-dist");
+    // Use bundled worker via Vite ?url
+    const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
+    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+    const buf = await file.arrayBuffer();
+    const doc = await pdfjs.getDocument({ data: buf }).promise;
+    const page = await doc.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d")!;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const blob: Blob = await new Promise((res) => canvas.toBlob((b) => res(b!), "image/png"));
+    // Use the PDF's intrinsic point size for layout (viewport at scale 1)
+    const baseVp = page.getViewport({ scale: 1 });
+    return { blob, width: Math.round(baseVp.width), height: Math.round(baseVp.height) };
+  };
+
   const handleBgUpload = async (file: File) => {
     if (!id) return;
     setBgUploading(true);
     try {
-      const ext = file.name.split(".").pop();
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      const isPdf = ext === "pdf" || file.type === "application/pdf";
       const path = `${id}/${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from("payroll-templates").upload(path, file, { upsert: true });
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from("payroll-templates").getPublicUrl(path);
 
-      const img = new Image();
-      img.src = pub.publicUrl;
-      await new Promise((r) => { img.onload = r; img.onerror = r; });
+      let width = 800;
+      let height = 1100;
+      let previewUrl: string | null = null;
+
+      if (isPdf) {
+        const { blob, width: w, height: h } = await renderPdfFirstPageToPng(file);
+        width = w;
+        height = h;
+        const previewPath = `${id}/${Date.now()}_preview.png`;
+        const { error: pErr } = await supabase.storage.from("payroll-templates").upload(previewPath, blob, { upsert: true, contentType: "image/png" });
+        if (pErr) throw pErr;
+        previewUrl = supabase.storage.from("payroll-templates").getPublicUrl(previewPath).data.publicUrl;
+      } else {
+        const img = new Image();
+        img.src = pub.publicUrl;
+        await new Promise((r) => { img.onload = r; img.onerror = r; });
+        width = img.naturalWidth || 800;
+        height = img.naturalHeight || 1100;
+      }
 
       if (template) {
         const { error } = await supabase.from("payroll_templates").update({
           background_url: pub.publicUrl,
-          width: img.naturalWidth || 800,
-          height: img.naturalHeight || 1100,
+          preview_url: previewUrl,
+          width,
+          height,
         }).eq("id", template.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("payroll_templates").insert({
           client_id: id,
           background_url: pub.publicUrl,
-          width: img.naturalWidth || 800,
-          height: img.naturalHeight || 1100,
+          preview_url: previewUrl,
+          width,
+          height,
           field_layout: [],
         });
         if (error) throw error;
       }
-      toast.success("Template uploaded");
+      toast.success(isPdf ? "PDF template uploaded" : "Template uploaded");
       load();
     } catch (e: any) {
+      console.error(e);
       toast.error(e.message);
     } finally {
       setBgUploading(false);
@@ -368,7 +408,7 @@ export default function AdminClientDetail() {
               <div className="flex items-center gap-3">
                 <input
                   type="file"
-                  accept="image/png,image/jpeg"
+                  accept="image/png,image/jpeg,application/pdf"
                   id="bg-upload"
                   className="hidden"
                   onChange={(e) => e.target.files?.[0] && handleBgUpload(e.target.files[0])}
@@ -385,6 +425,7 @@ export default function AdminClientDetail() {
                 <>
                   <TemplateDesigner
                     backgroundUrl={template.background_url}
+                    previewUrl={template.preview_url}
                     width={template.width}
                     height={template.height}
                     fields={fields}

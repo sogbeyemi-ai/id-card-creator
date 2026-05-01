@@ -1,0 +1,1 @@
+ALTER TABLE public.payroll_templates ADD COLUMN IF NOT EXISTS preview_url text;

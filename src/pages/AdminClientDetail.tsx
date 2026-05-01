@@ -533,9 +533,14 @@ export default function AdminClientDetail() {
           <Card>
             <CardHeader><CardTitle>Default Excel Column Mapping</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Type the exact Excel column header that maps to each payslip field. Leave blank if not in your sheet.
-              </p>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <p className="text-sm text-muted-foreground max-w-xl">
+                  Type the exact Excel column header that maps to each payslip field. Leave blank if not in your sheet.
+                </p>
+                <Button size="sm" variant="outline" onClick={applyProtenDefaults}>
+                  Apply PROTEN defaults
+                </Button>
+              </div>
               <div className="grid md:grid-cols-2 gap-3">
                 {PAYSLIP_FIELDS.map((f) => (
                   <div key={f.key}>

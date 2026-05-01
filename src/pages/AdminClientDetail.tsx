@@ -40,7 +40,7 @@ export default function AdminClientDetail() {
       .limit(1)
       .maybeSingle();
     setTemplate(t);
-    setFields((t?.field_layout as FieldPlacement[]) || []);
+    setFields((t?.field_layout as unknown as FieldPlacement[]) || []);
 
     const { data: cy } = await supabase
       .from("payroll_cycles")

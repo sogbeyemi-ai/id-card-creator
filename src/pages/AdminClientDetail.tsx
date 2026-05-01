@@ -33,6 +33,10 @@ export default function AdminClientDetail() {
   const [parsing, setParsing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [zipping, setZipping] = useState(false);
+  const [periodLabel, setPeriodLabel] = useState("");
+  const [payDate, setPayDate] = useState("");
+  const [templateKind, setTemplateKind] = useState<"coordinate" | "structured_proten">("coordinate");
+  const [savingTemplateKind, setSavingTemplateKind] = useState(false);
 
   const load = async () => {
     if (!id) return;

@@ -408,7 +408,7 @@ export default function AdminClientDetail() {
               <div className="flex items-center gap-3">
                 <input
                   type="file"
-                  accept="image/png,image/jpeg"
+                  accept="image/png,image/jpeg,application/pdf"
                   id="bg-upload"
                   className="hidden"
                   onChange={(e) => e.target.files?.[0] && handleBgUpload(e.target.files[0])}

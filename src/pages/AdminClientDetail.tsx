@@ -425,6 +425,7 @@ export default function AdminClientDetail() {
                 <>
                   <TemplateDesigner
                     backgroundUrl={template.background_url}
+                    previewUrl={template.preview_url}
                     width={template.width}
                     height={template.height}
                     fields={fields}

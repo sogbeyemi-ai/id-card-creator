@@ -43,6 +43,147 @@ export type Database = {
           },
         ]
       }
+      employees: {
+        Row: {
+          bank_account: string | null
+          bank_name: string | null
+          created_at: string
+          department: string | null
+          email: string | null
+          employment_type: string
+          full_name: string
+          hire_date: string | null
+          id: string
+          phone: string | null
+          role: string | null
+          status: string
+          updated_at: string
+          verified_staff_id: string | null
+        }
+        Insert: {
+          bank_account?: string | null
+          bank_name?: string | null
+          created_at?: string
+          department?: string | null
+          email?: string | null
+          employment_type?: string
+          full_name: string
+          hire_date?: string | null
+          id?: string
+          phone?: string | null
+          role?: string | null
+          status?: string
+          updated_at?: string
+          verified_staff_id?: string | null
+        }
+        Update: {
+          bank_account?: string | null
+          bank_name?: string | null
+          created_at?: string
+          department?: string | null
+          email?: string | null
+          employment_type?: string
+          full_name?: string
+          hire_date?: string | null
+          id?: string
+          phone?: string | null
+          role?: string | null
+          status?: string
+          updated_at?: string
+          verified_staff_id?: string | null
+        }
+        Relationships: []
+      }
+      payroll_items: {
+        Row: {
+          created_at: string
+          employee_id: string
+          gross_pay: number
+          id: string
+          net_pay: number
+          run_id: string
+          snapshot: Json
+          total_allowances: number
+          total_deductions: number
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          gross_pay?: number
+          id?: string
+          net_pay?: number
+          run_id: string
+          snapshot?: Json
+          total_allowances?: number
+          total_deductions?: number
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          gross_pay?: number
+          id?: string
+          net_pay?: number
+          run_id?: string
+          snapshot?: Json
+          total_allowances?: number
+          total_deductions?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_items_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_runs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          finalized_at: string | null
+          id: string
+          period_end: string
+          period_label: string
+          period_start: string
+          status: string
+          total_gross: number
+          total_net: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          finalized_at?: string | null
+          id?: string
+          period_end: string
+          period_label: string
+          period_start: string
+          status?: string
+          total_gross?: number
+          total_net?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          finalized_at?: string | null
+          id?: string
+          period_end?: string
+          period_label?: string
+          period_start?: string
+          status?: string
+          total_gross?: number
+          total_net?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -69,6 +210,53 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      salary_structures: {
+        Row: {
+          base_salary: number
+          created_at: string
+          effective_from: string
+          employee_id: string
+          housing_allowance: number
+          id: string
+          other_allowance: number
+          pension_rate: number
+          tax_rate: number
+          transport_allowance: number
+        }
+        Insert: {
+          base_salary?: number
+          created_at?: string
+          effective_from?: string
+          employee_id: string
+          housing_allowance?: number
+          id?: string
+          other_allowance?: number
+          pension_rate?: number
+          tax_rate?: number
+          transport_allowance?: number
+        }
+        Update: {
+          base_salary?: number
+          created_at?: string
+          effective_from?: string
+          employee_id?: string
+          housing_allowance?: number
+          id?: string
+          other_allowance?: number
+          pension_rate?: number
+          tax_rate?: number
+          transport_allowance?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salary_structures_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       staff_entries: {
         Row: {

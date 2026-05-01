@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { TemplateDesigner } from "@/components/payroll/TemplateDesigner";
-import { PAYSLIP_FIELDS, FieldPlacement } from "@/lib/payslipFields";
+import { PAYSLIP_FIELDS, FieldPlacement, PROTEN_DEFAULT_MAPPING } from "@/lib/payslipFields";
 import { ArrowLeft, Upload, Save, FileSpreadsheet, Plus, FileText, Download, Loader2, Eye, RefreshCw } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";

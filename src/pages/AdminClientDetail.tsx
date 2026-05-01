@@ -381,6 +381,34 @@ export default function AdminClientDetail() {
               )}
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3 p-3 rounded-md bg-muted/40 border">
+                <div>
+                  <Label className="text-xs">Payroll period (e.g. April 2026)</Label>
+                  <Input value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} placeholder="April 2026" />
+                </div>
+                <div>
+                  <Label className="text-xs">Pay date</Label>
+                  <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs">Template style</Label>
+                  <select
+                    className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                    value={templateKind}
+                    disabled={savingTemplateKind}
+                    onChange={(e) => saveTemplateKind(e.target.value as any)}
+                  >
+                    <option value="coordinate">Image overlay (drag fields on uploaded image)</option>
+                    <option value="structured_proten">Structured PROTEN layout (recreated, fixed labels)</option>
+                  </select>
+                </div>
+                <div className="md:col-span-3 flex justify-end">
+                  <Button size="sm" variant="outline" onClick={saveCyclePeriod}>
+                    <Save className="w-3.5 h-3.5 mr-1.5" />Save period & date
+                  </Button>
+                </div>
+              </div>
+
               <div className="grid gap-3 md:grid-cols-4">
                 <div>
                   <input type="file" accept=".xlsx,.xls" id="client-excel" className="hidden"

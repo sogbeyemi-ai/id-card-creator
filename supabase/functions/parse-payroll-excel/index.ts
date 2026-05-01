@@ -36,14 +36,23 @@ Deno.serve(async (req) => {
     const fileRes = await fetch(cycle.source_file_url);
     const buf = new Uint8Array(await fileRes.arrayBuffer());
     const wb = XLSX.read(buf, { type: "array" });
-    // Prefer a sheet named "payslip" (case-insensitive); fall back to first sheet
+    // Require a sheet named "Payslip" (case-insensitive). The spec says the
+    // payroll workbook MUST contain a tab called "Payslip" with headings on
+    // the first row.
     const targetName =
       wb.SheetNames.find((n) => n.trim().toLowerCase() === "payslip") ||
-      wb.SheetNames.find((n) => n.trim().toLowerCase().includes("payslip")) ||
-      wb.SheetNames[0];
+      wb.SheetNames.find((n) => n.trim().toLowerCase().includes("payslip"));
+    if (!targetName) {
+      throw new Error(
+        'No worksheet named "Payslip" was found. Please upload a payroll Excel file containing a Payslip tab.'
+      );
+    }
     console.log("Using sheet:", targetName, "of", wb.SheetNames);
     const ws = wb.Sheets[targetName];
     const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: "" });
+    if (rows.length === 0) {
+      throw new Error('The "Payslip" sheet is empty. Add headings on the first row and one row per employee.');
+    }
 
     const mapping = (cycle.column_mapping || {}) as Record<string, string>;
 

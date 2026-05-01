@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { TemplateDesigner } from "@/components/payroll/TemplateDesigner";
-import { PAYSLIP_FIELDS, FieldPlacement } from "@/lib/payslipFields";
+import { PAYSLIP_FIELDS, FieldPlacement, PROTEN_DEFAULT_MAPPING } from "@/lib/payslipFields";
 import { ArrowLeft, Upload, Save, FileSpreadsheet, Plus, FileText, Download, Loader2, Eye, RefreshCw } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
@@ -33,6 +33,10 @@ export default function AdminClientDetail() {
   const [parsing, setParsing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [zipping, setZipping] = useState(false);
+  const [periodLabel, setPeriodLabel] = useState("");
+  const [payDate, setPayDate] = useState("");
+  const [templateKind, setTemplateKind] = useState<"coordinate" | "structured_proten">("coordinate");
+  const [savingTemplateKind, setSavingTemplateKind] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -50,6 +54,7 @@ export default function AdminClientDetail() {
       .maybeSingle();
     setTemplate(t);
     setFields((t?.field_layout as unknown as FieldPlacement[]) || []);
+    setTemplateKind(((t?.template_kind as any) || "coordinate") as "coordinate" | "structured_proten");
 
     const { data: cy } = await supabase
       .from("payroll_cycles")
@@ -61,6 +66,8 @@ export default function AdminClientDetail() {
     const latest = (cy || [])[0] || null;
     setActiveCycle(latest);
     if (latest) {
+      setPeriodLabel(latest.period_label || "");
+      setPayDate(latest.pay_date || "");
       const { data: rs } = await supabase
         .from("payroll_rows")
         .select("*")
@@ -68,6 +75,9 @@ export default function AdminClientDetail() {
         .order("created_at");
       setActiveRows(rs || []);
     } else {
+      const fallback = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
+      setPeriodLabel(fallback);
+      setPayDate("");
       setActiveRows([]);
     }
   };
@@ -75,18 +85,67 @@ export default function AdminClientDetail() {
   const ensureActiveCycle = async () => {
     if (activeCycle) return activeCycle;
     if (!id) return null;
-    const monthLabel = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
+    const monthLabel = (periodLabel || "").trim() || new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase.from("payroll_cycles").insert({
       client_id: id,
       template_id: template?.id || null,
       period_label: monthLabel,
+      pay_date: payDate || null,
       column_mapping: columnMapping,
       created_by: user?.id,
     }).select().single();
     if (error) { toast.error(error.message); return null; }
     setActiveCycle(data);
     return data;
+  };
+
+  const saveCyclePeriod = async () => {
+    if (!activeCycle) {
+      const c = await ensureActiveCycle();
+      if (c) toast.success("Period saved");
+      return;
+    }
+    const { error } = await supabase.from("payroll_cycles").update({
+      period_label: periodLabel.trim() || activeCycle.period_label,
+      pay_date: payDate || null,
+    }).eq("id", activeCycle.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Period saved");
+    load();
+  };
+
+  const saveTemplateKind = async (kind: "coordinate" | "structured_proten") => {
+    if (!id) return;
+    setTemplateKind(kind);
+    setSavingTemplateKind(true);
+    try {
+      if (template) {
+        const { error } = await supabase.from("payroll_templates").update({ template_kind: kind }).eq("id", template.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("payroll_templates").insert({
+          client_id: id,
+          template_kind: kind,
+          background_url: "",
+          width: 595,
+          height: 842,
+          field_layout: [],
+        });
+        if (error) throw error;
+      }
+      toast.success("Template style saved");
+      load();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingTemplateKind(false);
+    }
+  };
+
+  const applyProtenDefaults = () => {
+    setColumnMapping({ ...PROTEN_DEFAULT_MAPPING });
+    toast.success("PROTEN defaults loaded — click Save Mapping");
   };
 
   const handleClientExcelUpload = async (file: File) => {
@@ -322,6 +381,34 @@ export default function AdminClientDetail() {
               )}
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3 p-3 rounded-md bg-muted/40 border">
+                <div>
+                  <Label className="text-xs">Payroll period (e.g. April 2026)</Label>
+                  <Input value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} placeholder="April 2026" />
+                </div>
+                <div>
+                  <Label className="text-xs">Pay date</Label>
+                  <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs">Template style</Label>
+                  <select
+                    className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                    value={templateKind}
+                    disabled={savingTemplateKind}
+                    onChange={(e) => saveTemplateKind(e.target.value as any)}
+                  >
+                    <option value="coordinate">Image overlay (drag fields on uploaded image)</option>
+                    <option value="structured_proten">Structured PROTEN layout (recreated, fixed labels)</option>
+                  </select>
+                </div>
+                <div className="md:col-span-3 flex justify-end">
+                  <Button size="sm" variant="outline" onClick={saveCyclePeriod}>
+                    <Save className="w-3.5 h-3.5 mr-1.5" />Save period & date
+                  </Button>
+                </div>
+              </div>
+
               <div className="grid gap-3 md:grid-cols-4">
                 <div>
                   <input type="file" accept=".xlsx,.xls" id="client-excel" className="hidden"
@@ -446,9 +533,14 @@ export default function AdminClientDetail() {
           <Card>
             <CardHeader><CardTitle>Default Excel Column Mapping</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Type the exact Excel column header that maps to each payslip field. Leave blank if not in your sheet.
-              </p>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <p className="text-sm text-muted-foreground max-w-xl">
+                  Type the exact Excel column header that maps to each payslip field. Leave blank if not in your sheet.
+                </p>
+                <Button size="sm" variant="outline" onClick={applyProtenDefaults}>
+                  Apply PROTEN defaults
+                </Button>
+              </div>
               <div className="grid md:grid-cols-2 gap-3">
                 {PAYSLIP_FIELDS.map((f) => (
                   <div key={f.key}>

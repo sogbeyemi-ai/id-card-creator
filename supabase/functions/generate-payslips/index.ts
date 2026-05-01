@@ -66,10 +66,24 @@ Deno.serve(async (req) => {
     const placements = (tpl.field_layout || []) as Placement[];
     const currency = client?.currency || "NGN";
 
-    // Fetch background image bytes
+    // Fetch background bytes (PDF, PNG, or JPG)
     const bgRes = await fetch(tpl.background_url);
     const bgBytes = new Uint8Array(await bgRes.arrayBuffer());
-    const isPng = tpl.background_url.toLowerCase().includes(".png");
+    // Detect format by magic bytes
+    const isPdf = bgBytes[0] === 0x25 && bgBytes[1] === 0x50 && bgBytes[2] === 0x44 && bgBytes[3] === 0x46; // %PDF
+    const isPng = bgBytes[0] === 0x89 && bgBytes[1] === 0x50 && bgBytes[2] === 0x4e && bgBytes[3] === 0x47;
+    console.log("Template format:", isPdf ? "PDF" : isPng ? "PNG" : "JPG", "size:", bgBytes.length);
+
+    // For PDF templates, pre-load source doc to copy first page each time
+    let templatePdf: PDFDocument | null = null;
+    let tplPageWidth = tpl.width;
+    let tplPageHeight = tpl.height;
+    if (isPdf) {
+      templatePdf = await PDFDocument.load(bgBytes);
+      const firstPage = templatePdf.getPage(0);
+      tplPageWidth = firstPage.getWidth();
+      tplPageHeight = firstPage.getHeight();
+    }
 
     // Fetch rows
     const { data: rows } = await admin.from("payroll_rows").select("*").eq("cycle_id", cycle_id);

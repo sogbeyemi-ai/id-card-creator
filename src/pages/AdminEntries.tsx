@@ -1274,6 +1274,7 @@ const AdminEntries = () => {
                       <TableRow
                         key={entry.id}
                         data-state={selectedIds.has(entry.id) ? "selected" : undefined}
+                        className={lastSelectedId === entry.id ? "ring-2 ring-primary ring-inset" : undefined}
                       >
                         <TableCell>
                           <Checkbox
@@ -1281,6 +1282,9 @@ const AdminEntries = () => {
                             onCheckedChange={() => toggleSelect(entry.id)}
                             aria-label={`Select ${entry.full_name}`}
                           />
+                          {lastSelectedId === entry.id && (
+                            <span className="ml-1 text-[10px] font-medium text-primary">last</span>
+                          )}
                         </TableCell>
                         <TableCell className="font-medium">{entry.full_name}</TableCell>
                         <TableCell>{rd || "—"}</TableCell>

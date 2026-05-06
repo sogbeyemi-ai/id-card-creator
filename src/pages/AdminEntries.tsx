@@ -1274,17 +1274,31 @@ const AdminEntries = () => {
                       <TableRow
                         key={entry.id}
                         data-state={selectedIds.has(entry.id) ? "selected" : undefined}
-                        className={lastSelectedId === entry.id ? "ring-2 ring-primary ring-inset" : undefined}
+                        className={
+                          lastSelectedId === entry.id
+                            ? "bg-accent/15 hover:bg-accent/20 outline outline-2 outline-accent -outline-offset-2"
+                            : undefined
+                        }
                       >
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedIds.has(entry.id)}
-                            onCheckedChange={() => toggleSelect(entry.id)}
-                            aria-label={`Select ${entry.full_name}`}
-                          />
+                        <TableCell className="relative">
                           {lastSelectedId === entry.id && (
-                            <span className="ml-1 text-[10px] font-medium text-primary">last</span>
+                            <span
+                              aria-hidden
+                              className="absolute left-0 top-0 bottom-0 w-1 bg-accent"
+                            />
                           )}
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={selectedIds.has(entry.id)}
+                              onCheckedChange={() => toggleSelect(entry.id)}
+                              aria-label={`Select ${entry.full_name}`}
+                            />
+                            {lastSelectedId === entry.id && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-accent text-accent-foreground">
+                                last
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="font-medium">{entry.full_name}</TableCell>
                         <TableCell>{rd || "—"}</TableCell>

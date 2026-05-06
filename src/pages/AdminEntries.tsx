@@ -96,6 +96,7 @@ const AdminEntries = () => {
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
   // Bulk download
   const [bulkDownloading, setBulkDownloading] = useState(false);

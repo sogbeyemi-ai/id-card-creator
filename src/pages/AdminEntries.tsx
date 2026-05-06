@@ -96,6 +96,7 @@ const AdminEntries = () => {
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
   // Bulk download
   const [bulkDownloading, setBulkDownloading] = useState(false);
@@ -295,6 +296,7 @@ const AdminEntries = () => {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
+    setLastSelectedId(id);
   };
 
   const clearFilters = () => {
@@ -470,15 +472,35 @@ const AdminEntries = () => {
     setBulkStatus(`Rendering 0 / ${targets.length}…`);
 
     const zip = new JSZip();
-    let failed = 0;
+    const failedEntries: { entry: StaffEntry; reason: string }[] = [];
+    const usedNames = new Set<string>();
 
-    // Render PDFs in parallel batches of 4 (sweet spot for browser CPU/memory).
-    const CONCURRENCY = 4;
+    // Render with retries to ensure NO selected card is silently dropped.
+    const CONCURRENCY = 3;
+    const MAX_ATTEMPTS = 3;
+    const renderWithRetry = async (entry: StaffEntry): Promise<Blob> => {
+      let lastErr: any;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          return await buildPdfBlob(entry);
+        } catch (err) {
+          lastErr = err;
+          console.warn(`render attempt ${attempt} failed for ${entry.full_name}`, err);
+          await new Promise((r) => setTimeout(r, 200 * attempt));
+        }
+      }
+      throw lastErr;
+    };
+
     const blobs = await runWithConcurrency(
       targets,
       async (entry) => {
-        const blob = await buildPdfBlob(entry);
-        return { entry, blob };
+        try {
+          const blob = await renderWithRetry(entry);
+          return { entry, blob, ok: true as const };
+        } catch (err: any) {
+          return { entry, ok: false as const, reason: err?.message || "render failed" };
+        }
       },
       CONCURRENCY,
       (done) => {
@@ -487,19 +509,32 @@ const AdminEntries = () => {
       }
     );
 
+    let added = 0;
     blobs.forEach((res) => {
-      if (!res || !res.blob) {
-        failed++;
+      if (!res) return;
+      if (!res.ok) {
+        failedEntries.push({ entry: res.entry, reason: res.reason });
         return;
       }
       const safeName = sanitize(res.entry.full_name) || "ID";
       const shortId = res.entry.id.slice(0, 8);
-      zip.file(`${safeName}_${shortId}.pdf`, res.blob);
+      // Guarantee unique filenames inside the ZIP (same name would otherwise overwrite).
+      let fname = `${safeName}_${shortId}.pdf`;
+      let dedup = 1;
+      while (usedNames.has(fname)) {
+        fname = `${safeName}_${shortId}_${dedup++}.pdf`;
+      }
+      usedNames.add(fname);
+      zip.file(fname, res.blob);
+      added++;
     });
+
+    if (added !== targets.length) {
+      console.error("bulk download mismatch", { selected: targets.length, added, failed: failedEntries });
+    }
 
     try {
       setBulkStatus("Compressing ZIP…");
-      // STORE = no deflate. PDFs are already compressed; dramatically faster.
       const zipBlob = await zip.generateAsync(
         { type: "blob", compression: "STORE" },
         (meta) => {
@@ -511,23 +546,20 @@ const AdminEntries = () => {
       const cityTag = cityFilter !== "all" ? `_${sanitize(cityFilter)}` : "";
       const filename = `id_cards${cityTag}_${stamp}.zip`;
 
-      // Save to in-memory list for re-download
       const saved: SavedDownload = {
         id: crypto.randomUUID(),
         name: filename,
         blob: zipBlob,
         sizeKb: Math.round(zipBlob.size / 1024),
-        count: targets.length - failed,
+        count: added,
         createdAt: Date.now(),
       };
       setSavedDownloads((prev) => [saved, ...prev].slice(0, 10));
 
-      // Trigger immediate download
       triggerBlobDownload(zipBlob, filename);
 
-      // Stamp downloaded_at for newly downloaded records
       const successfulIds = targets
-        .filter((t) => !t.downloaded_at)
+        .filter((t) => !failedEntries.some((f) => f.entry.id === t.id) && !t.downloaded_at)
         .map((t) => t.id);
       if (successfulIds.length > 0) {
         await supabase
@@ -536,11 +568,19 @@ const AdminEntries = () => {
           .in("id", successfulIds);
       }
 
-      toast.success(
-        failed > 0
-          ? `Downloaded ${targets.length - failed}/${targets.length} cards (${failed} failed)`
-          : `Downloaded ${targets.length} ID cards`
-      );
+      if (failedEntries.length > 0) {
+        const names = failedEntries.slice(0, 3).map((f) => f.entry.full_name).join(", ");
+        const more = failedEntries.length > 3 ? ` +${failedEntries.length - 3} more` : "";
+        toast.error(
+          `Downloaded ${added}/${targets.length}. Failed: ${names}${more}. They remain selected — click Bulk Download again to retry.`,
+          { duration: 8000 }
+        );
+        // Keep failed ones selected so the admin can retry without re-selecting.
+        setSelectedIds(new Set(failedEntries.map((f) => f.entry.id)));
+      } else {
+        toast.success(`Downloaded all ${added} ID cards`);
+        setSelectedIds(new Set());
+      }
       fetchEntries();
     } catch (err: any) {
       toast.error(err?.message || "Failed to build ZIP");
@@ -1234,6 +1274,7 @@ const AdminEntries = () => {
                       <TableRow
                         key={entry.id}
                         data-state={selectedIds.has(entry.id) ? "selected" : undefined}
+                        className={lastSelectedId === entry.id ? "ring-2 ring-primary ring-inset" : undefined}
                       >
                         <TableCell>
                           <Checkbox
@@ -1241,6 +1282,9 @@ const AdminEntries = () => {
                             onCheckedChange={() => toggleSelect(entry.id)}
                             aria-label={`Select ${entry.full_name}`}
                           />
+                          {lastSelectedId === entry.id && (
+                            <span className="ml-1 text-[10px] font-medium text-primary">last</span>
+                          )}
                         </TableCell>
                         <TableCell className="font-medium">{entry.full_name}</TableCell>
                         <TableCell>{rd || "—"}</TableCell>

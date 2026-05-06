@@ -296,6 +296,7 @@ const AdminEntries = () => {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
+    setLastSelectedId(id);
   };
 
   const clearFilters = () => {

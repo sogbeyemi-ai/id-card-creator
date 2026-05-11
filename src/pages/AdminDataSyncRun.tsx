@@ -19,7 +19,29 @@ export default function AdminDataSyncRun() {
   const [masterRows, setMasterRows] = useState<any[]>([]);
   const [masterHeaders, setMasterHeaders] = useState<string[]>([]);
   const [decisions, setDecisions] = useState<Record<string, { action: string; target_master_row_id?: string }>>({});
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+
+  const toggleOne = (id: string, v: boolean) => setSelected((s) => ({ ...s, [id]: v }));
+  const toggleMany = (ids: string[], v: boolean) =>
+    setSelected((s) => { const n = { ...s }; ids.forEach((id) => { n[id] = v; }); return n; });
+  const bulkSet = (ids: string[], action: string) => {
+    if (ids.length === 0) { toast.info("No items selected"); return; }
+    setDecisions((d) => {
+      const n = { ...d };
+      ids.forEach((id) => {
+        const it = items.find((x) => x.id === id);
+        if (!it || it.applied) return;
+        if (action === "apply" && !it.match_master_row_id) {
+          n[id] = { ...(n[id] || {}), action: "new" };
+        } else {
+          n[id] = { ...(n[id] || {}), action };
+        }
+      });
+      return n;
+    });
+    toast.success(`${ids.length} item(s) set to "${action}"`);
+  };
 
   useEffect(() => {
     (async () => {

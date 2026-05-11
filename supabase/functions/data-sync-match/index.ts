@@ -129,21 +129,43 @@ function nameMatchScore(a: string, b: string): number {
   const maxLen = Math.max(A.length, B.length);
   const sizeDiff = maxLen - minLen;
 
+  // CRITICAL: if both names have >=2 tokens, require at least 2 matching tokens.
+  // A single shared first name (e.g. "Christiana") between two otherwise different
+  // full names must NOT be considered a match — it produces false positives.
+  if (A.length >= 2 && B.length >= 2 && matched < 2) {
+    return 0;
+  }
+
+  // Surname check: when both have >=2 tokens, the last (surname) token must match
+  // OR at least be a strong fuzzy match. Different surnames = different people.
+  if (A.length >= 2 && B.length >= 2) {
+    const surnameA = A[A.length - 1];
+    const surnameB = B[B.length - 1];
+    // Also try sorted last-by-alphabet — but typically family name is last in input.
+    const surnameOk =
+      surnameA === surnameB ||
+      (surnameA.length >= 4 && surnameB.length >= 4 &&
+        (surnameA.startsWith(surnameB) || surnameB.startsWith(surnameA))) ||
+      dice(surnameA, surnameB) >= 0.85;
+    if (!surnameOk) {
+      // Surnames clearly differ — cap score so it never auto-applies; usually unmatched.
+      return matched >= 2 ? 45 : 0;
+    }
+  }
+
   // Strong: all tokens of shorter side matched (missing middle names is fine)
   if (matched === minLen && minLen >= 1) {
-    // If only 1 token matched and the other side has more, that's not enough
     if (minLen === 1 && maxLen > 1) {
-      return 60; // single name match, ambiguous → manual
+      return 55; // single name match, ambiguous → manual review only
     }
     return Math.max(80, Math.min(99, 95 - sizeDiff * 3));
   }
 
-  // Partial overlap
-  const coverage = matched / maxLen; // fraction of all distinct slots matched
+  // Partial overlap (already guaranteed matched>=2 here for multi-token names)
+  const coverage = matched / maxLen;
   if (matched >= 2) return Math.round(50 + coverage * 35); // 50..85
   if (matched === 1 && maxLen <= 2) return Math.round(40 + coverage * 25);
 
-  // Final fuzzy fallback on the whole sorted string
   const d = dice(sortedA, sortedB);
   if (d >= 0.7) return Math.round(40 + d * 40);
   return Math.round(d * 35);
@@ -243,6 +265,12 @@ Deno.serve(async (req) => {
       else if (best && confidence >= (threshold ?? 80)) decision = "auto_update";
       else if (best && confidence >= 60) decision = "manual";
       else decision = "unmatched";
+
+      // If unmatched, do NOT carry a proposed master row — prevents confusing
+      // "matched to wrong person" displays for low-confidence candidates.
+      if (decision === "unmatched") {
+        best = null;
+      }
 
       if (best && decision !== "unmatched") {
         for (const sh of source_headers) {

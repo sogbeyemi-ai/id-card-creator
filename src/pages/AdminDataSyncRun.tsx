@@ -104,6 +104,12 @@ export default function AdminDataSyncRun() {
       <Card key={it.id} className="border">
         <CardContent className="p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
+            <Checkbox
+              checked={!!selected[it.id]}
+              onCheckedChange={(v) => toggleOne(it.id, !!v)}
+              disabled={it.applied}
+              aria-label="Select item"
+            />
             <Badge className={badge.className} variant="outline">{badge.label}</Badge>
             <span className="text-sm font-medium">
               Source: {sourceHeaders.map((h) => it.source_row[h]).filter(Boolean).slice(0, 2).join(" — ")}

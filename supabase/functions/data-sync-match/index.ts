@@ -65,28 +65,88 @@ function alignHeaders(sourceHeaders: string[], masterHeaders: string[]) {
   return mapping;
 }
 
-function nameKey(name: string) {
-  return norm(name).split(" ").filter(Boolean).sort().join(" ");
+// Common honorifics/titles stripped before comparing names.
+const TITLES = new Set([
+  "mr", "mrs", "ms", "miss", "mister", "madam", "mdm",
+  "dr", "prof", "professor", "engr", "engineer",
+  "rev", "reverend", "pst", "pastor", "hon", "honorable",
+  "sir", "alhaji", "alhaja", "chief", "barr", "barrister",
+]);
+
+function tokens(s: string): string[] {
+  return norm(s).split(" ").filter(Boolean).filter((w) => !TITLES.has(w));
 }
 
+function nameKey(name: string) {
+  return tokens(name).sort().join(" ");
+}
+
+/**
+ * Token-aware name match. Per-token fuzzy + initial handling + subset boost.
+ * Returns 0..100.
+ *  - 100: identical token multisets
+ *  - 90-99: one side is a subset (missing middle names ok)
+ *  - 70-89: strong per-token fuzzy overlap (typos, partial spellings)
+ *  - 40-69: weak — flagged for manual review
+ *  - <40: unmatched
+ */
 function nameMatchScore(a: string, b: string): number {
-  const A = norm(a).split(" ").filter(Boolean);
-  const B = norm(b).split(" ").filter(Boolean);
+  const A = tokens(a);
+  const B = tokens(b);
   if (!A.length || !B.length) return 0;
-  const setA = new Set(A), setB = new Set(B);
+
   const sortedA = [...A].sort().join(" ");
   const sortedB = [...B].sort().join(" ");
   if (sortedA === sortedB) return 100;
-  const subset = A.every((w) => setB.has(w)) || B.every((w) => setA.has(w));
-  const overlap = A.filter((w) => setB.has(w)).length;
-  const sizeDiff = Math.abs(A.length - B.length);
-  if (subset) return Math.min(99, 80 + overlap * 5 - sizeDiff * 2);
-  // fuzzy fallback: dice on sorted forms
+
+  // Per-token match: exact, initial, or dice>=0.85 (handles typos like ADEYMI/ADEYEMI)
+  const tokenMatches = (x: string, y: string): boolean => {
+    if (x === y) return true;
+    // initial vs full word, either direction
+    if (x.length === 1 && y.startsWith(x)) return true;
+    if (y.length === 1 && x.startsWith(y)) return true;
+    // prefix containment for truncated names (>=4 chars)
+    if (x.length >= 4 && y.length >= 4 && (x.startsWith(y) || y.startsWith(x))) return true;
+    if (x.length >= 3 && y.length >= 3 && dice(x, y) >= 0.82) return true;
+    return false;
+  };
+
+  // Greedy bipartite matching A <-> B
+  const usedB = new Array(B.length).fill(false);
+  let matched = 0;
+  for (const ta of A) {
+    let bestIdx = -1, bestScore = 0;
+    for (let i = 0; i < B.length; i++) {
+      if (usedB[i]) continue;
+      if (!tokenMatches(ta, B[i])) continue;
+      const s = ta === B[i] ? 2 : 1;
+      if (s > bestScore) { bestScore = s; bestIdx = i; }
+    }
+    if (bestIdx >= 0) { usedB[bestIdx] = true; matched++; }
+  }
+
+  const minLen = Math.min(A.length, B.length);
+  const maxLen = Math.max(A.length, B.length);
+  const sizeDiff = maxLen - minLen;
+
+  // Strong: all tokens of shorter side matched (missing middle names is fine)
+  if (matched === minLen && minLen >= 1) {
+    // If only 1 token matched and the other side has more, that's not enough
+    if (minLen === 1 && maxLen > 1) {
+      return 60; // single name match, ambiguous → manual
+    }
+    return Math.max(80, Math.min(99, 95 - sizeDiff * 3));
+  }
+
+  // Partial overlap
+  const coverage = matched / maxLen; // fraction of all distinct slots matched
+  if (matched >= 2) return Math.round(50 + coverage * 35); // 50..85
+  if (matched === 1 && maxLen <= 2) return Math.round(40 + coverage * 25);
+
+  // Final fuzzy fallback on the whole sorted string
   const d = dice(sortedA, sortedB);
-  if (d >= 0.6) return Math.round(40 + d * 50); // 70..90
-  if (overlap >= 2) return Math.round(40 + overlap * 5);
-  if (overlap === 1 && d >= 0.4) return Math.round(20 + d * 30);
-  return Math.round(d * 40);
+  if (d >= 0.7) return Math.round(40 + d * 40);
+  return Math.round(d * 35);
 }
 
 function pickNameField(headers: string[]): string | null {

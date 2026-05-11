@@ -7,9 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Check, X } from "lucide-react";
+import { ArrowLeft, Check, X, Download } from "lucide-react";
 import { toast } from "sonner";
-import { confidenceBadge } from "@/lib/dataSync";
+import { confidenceBadge, exportToXlsx } from "@/lib/dataSync";
 
 export default function AdminDataSyncRun() {
   const { workspaceId, runId } = useParams();

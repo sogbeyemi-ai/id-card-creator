@@ -1,112 +1,84 @@
-## HR & Payroll — Phase 1 (Admin View Only)
+## HR Data Sync — New Admin Module
 
-Goal: Stand up the HR/Payroll backbone **inside the admin dashboard only**. Staff continue to use the public ID generator exactly as today — no new staff-facing pages, no payslip access for staff. We'll evaluate the admin flow first, then decide later whether to expose anything to staff.
+A standalone enterprise-grade reconciliation tool added to the admin dashboard. It does **not** touch the existing ID Generator, Payroll module, or `verified_staff` data. It lives at `/admin/data-sync`.
 
-The existing ID generator, verification flow, trash, duplicate protection, and download-lock logic remain **completely untouched**.
+### What admins can do
 
-### What admins will be able to do
+1. **Upload a Master Sheet** (.xlsx/.csv) — becomes the source of truth for a chosen "workspace" (e.g. a company). Headers + all rows are stored.
+2. **Upload one or more Source Sheets** — Excel, CSV, or pasted Google Sheets link.
+3. **System auto-maps headers** using fuzzy + alias dictionary (e.g. "Employee Name" → "Staff Name", "TIN" → "Tax ID"). Admin can override mappings.
+4. **System auto-matches staff rows** by name using order-independent, case-insensitive, accent/space-tolerant fuzzy matching with a confidence score (Exact 100, Strong 80–99, Weak <70).
+5. **Preview screen** shows: matched updates (diff per cell), unmatched source rows, and unchanged rows. Confidence badges on every match.
+6. **Admin approves** the sync. Only matches ≥ chosen threshold (default 80) auto-apply. Weak matches require manual confirmation. Blank source values never overwrite existing master values.
+7. **Unmatched records panel** — admin can pick a master row to merge into, mark as "new staff" (creates row), or skip.
+8. **Sync history** with rollback (each sync snapshot keeps a "before" state).
+9. **Export** updated master sheet as .xlsx.
 
-1. **Employees directory** — central list of all employees (seeded from existing `verified_staff`), with HR fields: hire date, employment type, status (active / on leave / terminated), bank details, contact, base salary.
-2. **Salary management** — set/update base salary, allowances (transport, housing), and deductions (tax, pension) per employee.
-3. **Payroll runs** — create a monthly payroll run (e.g. "May 2026"), auto-calculate net pay for every active employee, review totals, mark as "Finalized".
-4. **Payslip generation (admin-only)** — generate downloadable PDF payslips per employee for any finalized run. Admin downloads them; nothing is sent to staff.
-5. **Payroll history** — view past runs, totals, and who was paid what.
+### New admin route + nav
 
-### New admin pages
+- `/admin/data-sync` — workspaces list + "New workspace"
+- `/admin/data-sync/:workspaceId` — master grid, upload source, sync history
+- `/admin/data-sync/:workspaceId/sync/:syncId` — preview + approve
 
-- `/admin/employees` — list, search, edit employee HR profile
-- `/admin/employees/:id` — single employee detail (HR info + salary structure + payroll history)
-- `/admin/payroll` — list of payroll runs, "New Run" button
-- `/admin/payroll/:runId` — run detail: line items per employee, totals, finalize, download payslip PDFs
+Sidebar gets a new "Data Sync" entry. Existing nav stays untouched.
 
-Sidebar gets two new sections: **Employees** and **Payroll**. Existing ID generator nav stays as-is.
-
-### Database changes (new tables only — nothing existing is altered)
+### Database (new tables only)
 
 ```text
-employees
-  id uuid pk
-  verified_staff_id uuid (nullable, link to existing record)
-  full_name text
-  email text
-  phone text
-  hire_date date
-  employment_type text  -- 'full_time' | 'contract' | 'intern'
-  status text           -- 'active' | 'on_leave' | 'terminated'
-  department text
-  role text
-  bank_name text
-  bank_account text
-  created_at, updated_at
+sync_workspaces
+  id, name, created_by, created_at, updated_at
 
-salary_structures
-  id uuid pk
-  employee_id uuid fk -> employees
-  base_salary numeric
-  transport_allowance numeric default 0
-  housing_allowance numeric default 0
-  other_allowance numeric default 0
-  tax_rate numeric default 0       -- percentage
-  pension_rate numeric default 0   -- percentage
-  effective_from date
-  created_at
+sync_master_sheets
+  id, workspace_id, file_name, headers jsonb, uploaded_at, uploaded_by
 
-payroll_runs
-  id uuid pk
-  period_label text     -- e.g. "May 2026"
-  period_start date
-  period_end date
-  status text           -- 'draft' | 'finalized'
-  total_gross numeric
-  total_net numeric
-  created_by uuid       -- admin user
-  created_at, finalized_at
+sync_master_rows
+  id, workspace_id, data jsonb, name_key text (normalized), created_at, updated_at
 
-payroll_items
-  id uuid pk
-  run_id uuid fk -> payroll_runs (cascade)
-  employee_id uuid fk -> employees
-  gross_pay numeric
-  total_allowances numeric
-  total_deductions numeric
-  net_pay numeric
-  snapshot jsonb        -- frozen copy of salary structure at run time
-  created_at
+sync_runs
+  id, workspace_id, source_file_name, status (pending|previewed|applied|rolled_back),
+  header_mapping jsonb, threshold int, created_by, created_at, applied_at
+
+sync_run_items
+  id, run_id, source_row jsonb, match_master_row_id (nullable),
+  confidence numeric, decision text (auto_update|manual|new|skip|unmatched),
+  diff jsonb, applied bool
+
+sync_snapshots
+  id, run_id, master_row_id, before jsonb, after jsonb
 ```
 
-All tables get RLS: **only `is_approved_admin(auth.uid())` can read/write**. No public or staff access.
+All tables protected by `is_approved_admin(auth.uid())` RLS, same pattern as existing admin tables.
 
-### Edge function
+### Edge functions
 
-- `run-payroll` — given a `period_start` / `period_end`, fetches all active employees with their current salary structure, computes gross/net, inserts `payroll_items`, updates run totals. Uses service role; admin-only invocation guard.
+- `data-sync-parse` — receives uploaded file, parses with SheetJS, returns headers + rows.
+- `data-sync-match` — given a run's source rows + workspace master, computes header alignment and per-row name matches with confidence. Saves `sync_run_items`.
+- `data-sync-apply` — applies approved items, writing snapshots for rollback and updating `sync_master_rows`.
+- `data-sync-rollback` — restores from `sync_snapshots`.
+- `data-sync-export` — streams master sheet back as .xlsx.
 
-### How it touches the existing system
+### Matching internals
 
-- **`verified_staff`** stays the verification source for the ID generator. We add an "Import to Employees" admin button that copies/links records into the new `employees` table. ID generator behavior is unchanged.
-- **`user_roles`** is reused as-is. Only `admin` / `super_admin` can access HR/Payroll routes.
-- **`staff_entries`** is unchanged. Optionally we can show "ID generated: yes/no" on the employee detail page later (read-only join).
+- **Header mapping**: alias dictionary + Levenshtein/Dice (string-similarity) + AI fallback via Lovable AI (`google/gemini-3-flash-preview`) for unresolved headers only (cheap, headers are <50 strings).
+- **Name matching**: reuses the project's existing `normalizeName` + `nameMatchScore` helpers (already in `src/lib/nameMatch.ts`), extended with a token-set Dice fallback for spelling errors. Scores 0–100.
+- **Blank protection**: skip source fields where value is empty/null/whitespace.
 
-### What is explicitly NOT in Phase 1
+### Tech notes
 
-- No staff login, no staff dashboard, no staff payslip downloads
-- No leave management, attendance, or time tracking
-- No email/notification delivery of payslips
-- No tax authority reports
-- No multi-currency
+- Frontend: React + shadcn, drag/drop via existing pattern, `xlsx` (already installed) for client preview parsing, server re-parses for safety.
+- Confidence badges, Excel-style preview built with the existing Table component + virtualization only if a sheet exceeds 1k rows (keep simple first).
+- Google Sheets import = "Paste public sheet URL" → server fetches the `export?format=xlsx` URL (no extra connector needed). If user wants private sheets later, we can add the Google Drive connector then.
 
-These can come in Phase 2+ once you've validated the admin flow.
+### What is NOT in this first cut
 
-### Technical notes
+- Scheduled syncs (cron) — wire later once flow is validated
+- Multi-user audit beyond `created_by` per run
+- Private Google Sheets via OAuth — only public/exported URLs for now
 
-- Payroll calculations run server-side in the edge function for consistency and to avoid floating-point drift on the client.
-- Each `payroll_items.snapshot` freezes the salary structure used, so historical runs stay accurate even if salaries change later.
-- Payslip PDFs generated client-side using the same `jspdf` + `html2canvas` approach already in the project, keeping the stack consistent.
-- All new routes guarded by the existing admin auth pattern in `AdminLayout.tsx`.
+### Risk to existing system
 
-### Risk to existing ID generator
-
-**None.** New tables, new routes, new edge function. No schema changes to existing tables. No changes to public `/` route or the verification cache.
+**None.** New tables, new routes, new edge functions, new sidebar entry. No changes to ID generator, payroll, employees, or verified_staff.
 
 ---
 
-If this looks right, approve and I'll implement it. If you'd like to trim further (e.g. start with just Employees + Salary, defer Payroll Runs to Phase 1B), say the word and I'll revise.
+Approve and I'll build it. If you want to trim (e.g. skip rollback, skip Google Sheets) say so and I'll cut accordingly.

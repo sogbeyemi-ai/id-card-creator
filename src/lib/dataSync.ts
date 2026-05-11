@@ -8,9 +8,9 @@ export interface ParsedSheet {
 
 export async function parseFileLocal(file: File): Promise<ParsedSheet> {
   const buf = await file.arrayBuffer();
-  const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
+  const wb = XLSX.read(new Uint8Array(buf), { type: "array", cellDates: true, cellNF: false });
   const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+  const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "", raw: false, dateNF: "yyyy-mm-dd" });
   const headers = rows.length ? Object.keys(rows[0]) : [];
   return { fileName: file.name, headers, rows };
 }

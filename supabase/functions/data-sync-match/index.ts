@@ -81,6 +81,97 @@ function nameKey(name: string) {
   return tokens(name).sort().join(" ");
 }
 
+type MasterCandidate = {
+  id: string;
+  data: Record<string, any>;
+  name: string;
+  tokenList: string[];
+  name_key: string;
+};
+
+function pushIndex<T>(map: Map<string, T[]>, key: string, value: T) {
+  if (!key) return;
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
+}
+
+function buildMasterIndexes(masterRows: any[], mstNameField: string | null) {
+  const candidates: MasterCandidate[] = [];
+  const byExactKey = new Map<string, MasterCandidate[]>();
+  const byToken = new Map<string, MasterCandidate[]>();
+  const byPrefix = new Map<string, MasterCandidate[]>();
+
+  for (const row of masterRows) {
+    const name = mstNameField ? String((row.data as any)?.[mstNameField] ?? "") : "";
+    const tokenList = tokens(name);
+    const exactKey = row.name_key || nameKey(name);
+    const candidate: MasterCandidate = {
+      id: row.id,
+      data: row.data as Record<string, any>,
+      name,
+      tokenList,
+      name_key: exactKey,
+    };
+
+    candidates.push(candidate);
+    pushIndex(byExactKey, exactKey, candidate);
+
+    for (const token of new Set(tokenList)) {
+      pushIndex(byToken, token, candidate);
+      if (token.length >= 4) pushIndex(byPrefix, token.slice(0, 4), candidate);
+    }
+  }
+
+  return { candidates, byExactKey, byToken, byPrefix };
+}
+
+function candidatePoolForName(
+  srcName: string,
+  indexes: ReturnType<typeof buildMasterIndexes>,
+) {
+  const srcTokens = tokens(srcName);
+  const uniqueTokens = [...new Set(srcTokens)];
+  const pool = new Map<string, MasterCandidate>();
+  const addMany = (rows?: MasterCandidate[]) => {
+    rows?.forEach((row) => pool.set(row.id, row));
+  };
+
+  addMany(indexes.byExactKey.get(nameKey(srcName)));
+
+  const informativeTokens = uniqueTokens
+    .filter((token) => token.length >= 3)
+    .sort((a, b) => {
+      const aFreq = indexes.byToken.get(a)?.length ?? Number.MAX_SAFE_INTEGER;
+      const bFreq = indexes.byToken.get(b)?.length ?? Number.MAX_SAFE_INTEGER;
+      if (aFreq !== bFreq) return aFreq - bFreq;
+      return b.length - a.length;
+    });
+
+  const priorityTokens = [
+    srcTokens[srcTokens.length - 1],
+    srcTokens[0],
+    informativeTokens[0],
+    informativeTokens[1],
+  ].filter(Boolean) as string[];
+
+  for (const token of new Set(priorityTokens)) {
+    addMany(indexes.byToken.get(token));
+    if (token.length >= 4) addMany(indexes.byPrefix.get(token.slice(0, 4)));
+  }
+
+  if (pool.size < 10) {
+    for (const token of informativeTokens.slice(0, 4)) {
+      addMany(indexes.byToken.get(token));
+      if (token.length >= 4) addMany(indexes.byPrefix.get(token.slice(0, 4)));
+      if (pool.size >= 50) break;
+    }
+  }
+
+  if (pool.size > 0) return [...pool.values()];
+  return indexes.candidates.length <= 1500 ? indexes.candidates : [];
+}
+
 /**
  * Token-aware name match. Per-token fuzzy + initial handling + subset boost.
  * Returns 0..100.
@@ -230,6 +321,7 @@ Deno.serve(async (req) => {
     const headerMapping = alignHeaders(source_headers, masterHeaders);
     const srcNameField = pickNameField(source_headers);
     const mstNameField = pickNameField(masterHeaders);
+    const masterIndexes = buildMasterIndexes(master, mstNameField);
 
     // create run
     const { data: run, error: runErr } = await supabase
@@ -249,12 +341,12 @@ Deno.serve(async (req) => {
     const items: any[] = [];
     for (const srow of source_rows as Record<string, any>[]) {
       const srcName = srcNameField ? String(srow[srcNameField] ?? "") : "";
-      let best: { row: any; score: number } | null = null;
+      let best: { row: MasterCandidate; score: number } | null = null;
       if (srcName && mstNameField) {
-        for (const mrow of master) {
-          const mname = String((mrow.data as any)[mstNameField] ?? "");
-          if (!mname) continue;
-          const s = nameMatchScore(srcName, mname);
+        const candidates = candidatePoolForName(srcName, masterIndexes);
+        for (const mrow of candidates) {
+          if (!mrow.name) continue;
+          const s = nameMatchScore(srcName, mrow.name);
           if (!best || s > best.score) best = { row: mrow, score: s };
         }
       }

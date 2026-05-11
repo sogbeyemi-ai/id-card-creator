@@ -30,11 +30,11 @@ async function parseSheet(file: File | ArrayBuffer | Uint8Array, fileName: strin
   if (file instanceof File) buf = await file.arrayBuffer();
   else if (file instanceof Uint8Array) buf = file.buffer;
   else buf = file;
-  const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
+  const wb = XLSX.read(new Uint8Array(buf), { type: "array", cellDates: true, cellNF: false });
   // Prefer a sheet named like Payslip/Master/Sheet1 — fallback to first
   const sheetName = wb.SheetNames[0];
   const sheet = wb.Sheets[sheetName];
-  const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false, dateNF: "yyyy-mm-dd" });
   const headers = rows.length ? Object.keys(rows[0]) : [];
   return { fileName, sheetName, headers, rows };
 }

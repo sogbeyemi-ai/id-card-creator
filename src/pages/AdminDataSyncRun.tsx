@@ -181,6 +181,9 @@ export default function AdminDataSyncRun() {
         <h1 className="text-xl font-display font-bold">{run.source_file_name}</h1>
         <Badge variant="outline">{run.status}</Badge>
         <div className="ml-auto flex gap-2">
+          <Button variant="outline" onClick={downloadUpdatedMaster}>
+            <Download className="w-4 h-4" /> Download updated master
+          </Button>
           {!isApplied && (
             <Button onClick={apply} disabled={busy}>
               <Check className="w-4 h-4" /> Apply sync

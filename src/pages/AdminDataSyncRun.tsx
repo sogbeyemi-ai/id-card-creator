@@ -7,9 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Check, X } from "lucide-react";
+import { ArrowLeft, Check, X, Download } from "lucide-react";
 import { toast } from "sonner";
-import { confidenceBadge } from "@/lib/dataSync";
+import { confidenceBadge, exportToXlsx } from "@/lib/dataSync";
 
 export default function AdminDataSyncRun() {
   const { workspaceId, runId } = useParams();
@@ -92,6 +92,16 @@ export default function AdminDataSyncRun() {
     } finally { setBusy(false); }
   };
 
+  const downloadUpdatedMaster = async () => {
+    const { data: mr } = await supabase.from("sync_master_rows" as any)
+      .select("data").eq("workspace_id", workspaceId).limit(10000);
+    const rows = ((mr as any) || []).map((r: any) => r.data);
+    if (!rows.length) { toast.error("Master is empty"); return; }
+    const stamp = new Date().toISOString().slice(0, 10);
+    exportToXlsx(masterHeaders, rows, `master-updated-${stamp}.xlsx`);
+    toast.success("Updated master downloaded");
+  };
+
   const masterById = useMemo(() => Object.fromEntries(masterRows.map((m) => [m.id, m])), [masterRows]);
   const headerMapping: Record<string, string | null> = run?.header_mapping || {};
   const sourceHeaders = Object.keys(headerMapping);
@@ -171,6 +181,9 @@ export default function AdminDataSyncRun() {
         <h1 className="text-xl font-display font-bold">{run.source_file_name}</h1>
         <Badge variant="outline">{run.status}</Badge>
         <div className="ml-auto flex gap-2">
+          <Button variant="outline" onClick={downloadUpdatedMaster}>
+            <Download className="w-4 h-4" /> Download updated master
+          </Button>
           {!isApplied && (
             <Button onClick={apply} disabled={busy}>
               <Check className="w-4 h-4" /> Apply sync

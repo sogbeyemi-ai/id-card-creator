@@ -266,6 +266,12 @@ Deno.serve(async (req) => {
       else if (best && confidence >= 60) decision = "manual";
       else decision = "unmatched";
 
+      // If unmatched, do NOT carry a proposed master row — prevents confusing
+      // "matched to wrong person" displays for low-confidence candidates.
+      if (decision === "unmatched") {
+        best = null;
+      }
+
       if (best && decision !== "unmatched") {
         for (const sh of source_headers) {
           const mh = headerMapping[sh];

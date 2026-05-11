@@ -19,7 +19,29 @@ export default function AdminDataSyncRun() {
   const [masterRows, setMasterRows] = useState<any[]>([]);
   const [masterHeaders, setMasterHeaders] = useState<string[]>([]);
   const [decisions, setDecisions] = useState<Record<string, { action: string; target_master_row_id?: string }>>({});
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+
+  const toggleOne = (id: string, v: boolean) => setSelected((s) => ({ ...s, [id]: v }));
+  const toggleMany = (ids: string[], v: boolean) =>
+    setSelected((s) => { const n = { ...s }; ids.forEach((id) => { n[id] = v; }); return n; });
+  const bulkSet = (ids: string[], action: string) => {
+    if (ids.length === 0) { toast.info("No items selected"); return; }
+    setDecisions((d) => {
+      const n = { ...d };
+      ids.forEach((id) => {
+        const it = items.find((x) => x.id === id);
+        if (!it || it.applied) return;
+        if (action === "apply" && !it.match_master_row_id) {
+          n[id] = { ...(n[id] || {}), action: "new" };
+        } else {
+          n[id] = { ...(n[id] || {}), action };
+        }
+      });
+      return n;
+    });
+    toast.success(`${ids.length} item(s) set to "${action}"`);
+  };
 
   useEffect(() => {
     (async () => {
@@ -82,6 +104,12 @@ export default function AdminDataSyncRun() {
       <Card key={it.id} className="border">
         <CardContent className="p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
+            <Checkbox
+              checked={!!selected[it.id]}
+              onCheckedChange={(v) => toggleOne(it.id, !!v)}
+              disabled={it.applied}
+              aria-label="Select item"
+            />
             <Badge className={badge.className} variant="outline">{badge.label}</Badge>
             <span className="text-sm font-medium">
               Source: {sourceHeaders.map((h) => it.source_row[h]).filter(Boolean).slice(0, 2).join(" — ")}
@@ -157,15 +185,49 @@ export default function AdminDataSyncRun() {
           <TabsTrigger value="manual">Needs review ({groups.manual.length})</TabsTrigger>
           <TabsTrigger value="unmatched">Unmatched ({groups.unmatched.length})</TabsTrigger>
         </TabsList>
-        <TabsContent value="auto" className="space-y-2">
-          {groups.auto.length === 0 ? <p className="text-sm text-muted-foreground">Nothing to auto-update.</p> : groups.auto.map(renderItem)}
-        </TabsContent>
-        <TabsContent value="manual" className="space-y-2">
-          {groups.manual.length === 0 ? <p className="text-sm text-muted-foreground">No weak matches.</p> : groups.manual.map(renderItem)}
-        </TabsContent>
-        <TabsContent value="unmatched" className="space-y-2">
-          {groups.unmatched.length === 0 ? <p className="text-sm text-muted-foreground">All rows matched.</p> : groups.unmatched.map(renderItem)}
-        </TabsContent>
+        {(["auto", "manual", "unmatched"] as const).map((key) => {
+          const list = groups[key];
+          const ids = list.filter((i: any) => !i.applied).map((i: any) => i.id);
+          const selectedIds = ids.filter((id) => selected[id]);
+          const allChecked = ids.length > 0 && selectedIds.length === ids.length;
+          const someChecked = selectedIds.length > 0 && !allChecked;
+          const emptyMsg = key === "auto" ? "Nothing to auto-update." : key === "manual" ? "No weak matches." : "All rows matched.";
+          return (
+            <TabsContent key={key} value={key} className="space-y-2">
+              {list.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{emptyMsg}</p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-2 p-2 border rounded-md bg-muted/30 sticky top-0 z-10">
+                    <Checkbox
+                      checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                      onCheckedChange={(v) => toggleMany(ids, !!v)}
+                      aria-label="Select all"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {selectedIds.length} of {ids.length} selected
+                    </span>
+                    <div className="ml-auto flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" disabled={selectedIds.length === 0} onClick={() => bulkSet(selectedIds, "apply")}>
+                        <Check className="w-3 h-3" /> Apply selected
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={selectedIds.length === 0} onClick={() => bulkSet(selectedIds, "new")}>
+                        Create new
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={selectedIds.length === 0} onClick={() => bulkSet(selectedIds, "skip")}>
+                        <X className="w-3 h-3" /> Skip selected
+                      </Button>
+                      {selectedIds.length > 0 && (
+                        <Button size="sm" variant="ghost" onClick={() => toggleMany(ids, false)}>Clear</Button>
+                      )}
+                    </div>
+                  </div>
+                  {list.map(renderItem)}
+                </>
+              )}
+            </TabsContent>
+          );
+        })}
       </Tabs>
     </div>
   );

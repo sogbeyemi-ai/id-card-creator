@@ -92,6 +92,16 @@ export default function AdminDataSyncRun() {
     } finally { setBusy(false); }
   };
 
+  const downloadUpdatedMaster = async () => {
+    const { data: mr } = await supabase.from("sync_master_rows" as any)
+      .select("data").eq("workspace_id", workspaceId).limit(10000);
+    const rows = ((mr as any) || []).map((r: any) => r.data);
+    if (!rows.length) { toast.error("Master is empty"); return; }
+    const stamp = new Date().toISOString().slice(0, 10);
+    exportToXlsx(masterHeaders, rows, `master-updated-${stamp}.xlsx`);
+    toast.success("Updated master downloaded");
+  };
+
   const masterById = useMemo(() => Object.fromEntries(masterRows.map((m) => [m.id, m])), [masterRows]);
   const headerMapping: Record<string, string | null> = run?.header_mapping || {};
   const sourceHeaders = Object.keys(headerMapping);

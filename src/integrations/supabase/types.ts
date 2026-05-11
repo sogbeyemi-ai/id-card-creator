@@ -517,6 +517,223 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_master_rows: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          name_key: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          id?: string
+          name_key?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          name_key?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_master_rows_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "sync_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_master_sheets: {
+        Row: {
+          file_name: string
+          headers: Json
+          id: string
+          uploaded_at: string
+          uploaded_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          file_name: string
+          headers?: Json
+          id?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+          workspace_id: string
+        }
+        Update: {
+          file_name?: string
+          headers?: Json
+          id?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_master_sheets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "sync_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_run_items: {
+        Row: {
+          applied: boolean
+          confidence: number
+          created_at: string
+          decision: string
+          diff: Json
+          id: string
+          match_master_row_id: string | null
+          run_id: string
+          source_row: Json
+        }
+        Insert: {
+          applied?: boolean
+          confidence?: number
+          created_at?: string
+          decision?: string
+          diff?: Json
+          id?: string
+          match_master_row_id?: string | null
+          run_id: string
+          source_row?: Json
+        }
+        Update: {
+          applied?: boolean
+          confidence?: number
+          created_at?: string
+          decision?: string
+          diff?: Json
+          id?: string
+          match_master_row_id?: string | null
+          run_id?: string
+          source_row?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_run_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_runs: {
+        Row: {
+          applied_at: string | null
+          created_at: string
+          created_by: string | null
+          header_mapping: Json
+          id: string
+          source_file_name: string
+          status: string
+          threshold: number
+          workspace_id: string
+        }
+        Insert: {
+          applied_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          header_mapping?: Json
+          id?: string
+          source_file_name: string
+          status?: string
+          threshold?: number
+          workspace_id: string
+        }
+        Update: {
+          applied_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          header_mapping?: Json
+          id?: string
+          source_file_name?: string
+          status?: string
+          threshold?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_runs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "sync_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_snapshots: {
+        Row: {
+          after: Json
+          before: Json
+          created_at: string
+          id: string
+          master_row_id: string | null
+          run_id: string
+        }
+        Insert: {
+          after?: Json
+          before?: Json
+          created_at?: string
+          id?: string
+          master_row_id?: string | null
+          run_id: string
+        }
+        Update: {
+          after?: Json
+          before?: Json
+          created_at?: string
+          id?: string
+          master_row_id?: string | null
+          run_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_snapshots_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_workspaces: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

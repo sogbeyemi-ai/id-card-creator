@@ -14,6 +14,9 @@ import AdminUsers from "./pages/AdminUsers.tsx";
 import AdminClients from "./pages/AdminClients.tsx";
 import AdminClientDetail from "./pages/AdminClientDetail.tsx";
 import AdminCycleDetail from "./pages/AdminCycleDetail.tsx";
+import AdminDataSync from "./pages/AdminDataSync.tsx";
+import AdminDataSyncWorkspace from "./pages/AdminDataSyncWorkspace.tsx";
+import AdminDataSyncRun from "./pages/AdminDataSyncRun.tsx";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +37,9 @@ const App = () => (
             <Route path="clients" element={<AdminClients />} />
             <Route path="clients/:id" element={<AdminClientDetail />} />
             <Route path="payroll/:id" element={<AdminCycleDetail />} />
+            <Route path="data-sync" element={<AdminDataSync />} />
+            <Route path="data-sync/:workspaceId" element={<AdminDataSyncWorkspace />} />
+            <Route path="data-sync/:workspaceId/run/:runId" element={<AdminDataSyncRun />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -1,4 +1,4 @@
-import { Upload, Users, CreditCard, LogOut, Home, ShieldCheck, Building2 } from "lucide-react";
+import { Upload, Users, CreditCard, LogOut, Home, ShieldCheck, Building2, Database } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +31,7 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
     { title: "Upload Staff Data", url: "/admin/upload", icon: Upload },
     { title: "Generated IDs", url: "/admin/entries", icon: CreditCard },
     { title: "Payroll Clients", url: "/admin/clients", icon: Building2 },
+    { title: "Data Sync", url: "/admin/data-sync", icon: Database },
     ...(isSuperAdmin
       ? [{ title: "Admin Users", url: "/admin/users", icon: Users }]
       : []),

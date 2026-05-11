@@ -1,0 +1,172 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, Check, X } from "lucide-react";
+import { toast } from "sonner";
+import { confidenceBadge } from "@/lib/dataSync";
+
+export default function AdminDataSyncRun() {
+  const { workspaceId, runId } = useParams();
+  const navigate = useNavigate();
+  const [run, setRun] = useState<any>(null);
+  const [items, setItems] = useState<any[]>([]);
+  const [masterRows, setMasterRows] = useState<any[]>([]);
+  const [masterHeaders, setMasterHeaders] = useState<string[]>([]);
+  const [decisions, setDecisions] = useState<Record<string, { action: string; target_master_row_id?: string }>>({});
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data: r } = await supabase.from("sync_runs" as any).select("*").eq("id", runId).single();
+      setRun(r);
+      const { data: it } = await supabase.from("sync_run_items" as any).select("*").eq("run_id", runId);
+      setItems((it as any) || []);
+      const { data: sheet } = await supabase.from("sync_master_sheets" as any)
+        .select("headers").eq("workspace_id", workspaceId)
+        .order("uploaded_at", { ascending: false }).limit(1).maybeSingle();
+      setMasterHeaders(((sheet as any)?.headers as string[]) || []);
+      const { data: mr } = await supabase.from("sync_master_rows" as any).select("id, data").eq("workspace_id", workspaceId);
+      setMasterRows((mr as any) || []);
+
+      // default decisions
+      const def: Record<string, any> = {};
+      ((it as any) || []).forEach((x: any) => {
+        if (x.applied) return;
+        if (x.decision === "auto_update") def[x.id] = { action: "apply" };
+        else if (x.decision === "manual") def[x.id] = { action: "skip" };
+        else def[x.id] = { action: "skip" };
+      });
+      setDecisions(def);
+    })();
+  }, [runId, workspaceId]);
+
+  const groups = useMemo(() => ({
+    auto: items.filter((i) => i.decision === "auto_update"),
+    manual: items.filter((i) => i.decision === "manual"),
+    unmatched: items.filter((i) => i.decision === "unmatched" || i.decision === "new" || i.decision === "skip"),
+  }), [items]);
+
+  const apply = async () => {
+    setBusy(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/data-sync-apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ run_id: runId, item_decisions: decisions }),
+      });
+      const r = await resp.json();
+      if (!resp.ok) throw new Error(r.error || "Apply failed");
+      toast.success(`Applied ${r.applied} changes`);
+      navigate(`/admin/data-sync/${workspaceId}`);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally { setBusy(false); }
+  };
+
+  const masterById = useMemo(() => Object.fromEntries(masterRows.map((m) => [m.id, m])), [masterRows]);
+  const headerMapping: Record<string, string | null> = run?.header_mapping || {};
+  const sourceHeaders = Object.keys(headerMapping);
+
+  const renderItem = (it: any) => {
+    const badge = confidenceBadge(Math.round(Number(it.confidence)));
+    const master = it.match_master_row_id ? masterById[it.match_master_row_id] : null;
+    const dec = decisions[it.id] || { action: "skip" };
+    return (
+      <Card key={it.id} className="border">
+        <CardContent className="p-3 space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge className={badge.className} variant="outline">{badge.label}</Badge>
+            <span className="text-sm font-medium">
+              Source: {sourceHeaders.map((h) => it.source_row[h]).filter(Boolean).slice(0, 2).join(" — ")}
+            </span>
+            {master && (
+              <span className="text-xs text-muted-foreground ml-auto">
+                → Master: {masterHeaders.map((h) => master.data[h]).filter(Boolean).slice(0, 2).join(" — ")}
+              </span>
+            )}
+          </div>
+          {Object.keys(it.diff || {}).length > 0 && (
+            <div className="text-xs grid grid-cols-1 md:grid-cols-2 gap-1">
+              {Object.entries(it.diff).map(([k, v]: any) => (
+                <div key={k} className="border rounded px-2 py-1">
+                  <span className="font-medium">{k}:</span>{" "}
+                  <span className="text-muted-foreground line-through">{String(v.from ?? "—")}</span>{" → "}
+                  <span className="text-emerald-600">{String(v.to)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={dec.action} onValueChange={(v) => setDecisions((d) => ({ ...d, [it.id]: { ...d[it.id], action: v } }))}>
+              <SelectTrigger className="w-44 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {it.match_master_row_id && <SelectItem value="apply">Apply update</SelectItem>}
+                <SelectItem value="merge">Merge into…</SelectItem>
+                <SelectItem value="new">Create new row</SelectItem>
+                <SelectItem value="skip">Skip</SelectItem>
+              </SelectContent>
+            </Select>
+            {dec.action === "merge" && (
+              <Select value={dec.target_master_row_id || ""} onValueChange={(v) => setDecisions((d) => ({ ...d, [it.id]: { ...d[it.id], target_master_row_id: v } }))}>
+                <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Pick master row…" /></SelectTrigger>
+                <SelectContent>
+                  {masterRows.slice(0, 200).map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {masterHeaders.map((h) => m.data[h]).filter(Boolean).slice(0, 2).join(" — ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  if (!run) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  const isApplied = run.status === "applied" || run.status === "rolled_back";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button variant="ghost" size="sm" asChild>
+          <Link to={`/admin/data-sync/${workspaceId}`}><ArrowLeft className="w-4 h-4" /> Back</Link>
+        </Button>
+        <h1 className="text-xl font-display font-bold">{run.source_file_name}</h1>
+        <Badge variant="outline">{run.status}</Badge>
+        <div className="ml-auto flex gap-2">
+          {!isApplied && (
+            <Button onClick={apply} disabled={busy}>
+              <Check className="w-4 h-4" /> Apply sync
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Tabs defaultValue="auto">
+        <TabsList>
+          <TabsTrigger value="auto">Auto-update ({groups.auto.length})</TabsTrigger>
+          <TabsTrigger value="manual">Needs review ({groups.manual.length})</TabsTrigger>
+          <TabsTrigger value="unmatched">Unmatched ({groups.unmatched.length})</TabsTrigger>
+        </TabsList>
+        <TabsContent value="auto" className="space-y-2">
+          {groups.auto.length === 0 ? <p className="text-sm text-muted-foreground">Nothing to auto-update.</p> : groups.auto.map(renderItem)}
+        </TabsContent>
+        <TabsContent value="manual" className="space-y-2">
+          {groups.manual.length === 0 ? <p className="text-sm text-muted-foreground">No weak matches.</p> : groups.manual.map(renderItem)}
+        </TabsContent>
+        <TabsContent value="unmatched" className="space-y-2">
+          {groups.unmatched.length === 0 ? <p className="text-sm text-muted-foreground">All rows matched.</p> : groups.unmatched.map(renderItem)}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

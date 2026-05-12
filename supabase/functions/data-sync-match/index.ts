@@ -87,6 +87,8 @@ type MasterCandidate = {
   name: string;
   tokenList: string[];
   name_key: string;
+  surname: string;
+  normalizedName: string;
 };
 
 function pushIndex<T>(map: Map<string, T[]>, key: string, value: T) {

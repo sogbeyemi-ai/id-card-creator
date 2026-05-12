@@ -380,7 +380,8 @@ Deno.serve(async (req) => {
     if (runErr) throw runErr;
 
     const items: any[] = [];
-    for (const srow of source_rows as Record<string, any>[]) {
+    const sourceRows = source_rows as Record<string, any>[];
+    for (const srow of sourceRows) {
       const srcName = srcNameField ? String(srow[srcNameField] ?? "") : "";
       let best: { row: MasterCandidate; score: number } | null = null;
       if (srcName && mstNameField) {
@@ -389,6 +390,7 @@ Deno.serve(async (req) => {
           if (!mrow.name) continue;
           const s = nameMatchScore(srcName, mrow.name);
           if (!best || s > best.score) best = { row: mrow, score: s };
+          if (s === 100) break;
         }
       }
       const confidence = best?.score ?? 0;
@@ -426,6 +428,10 @@ Deno.serve(async (req) => {
         decision,
         diff,
       });
+    }
+
+    if (items.length !== sourceRows.length) {
+      throw new Error("Match processing incomplete");
     }
 
     // chunk insert

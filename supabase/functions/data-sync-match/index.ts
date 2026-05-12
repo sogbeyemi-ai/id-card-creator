@@ -87,6 +87,7 @@ type MasterCandidate = {
   name: string;
   tokenList: string[];
   name_key: string;
+  surname: string;
 };
 
 function pushIndex<T>(map: Map<string, T[]>, key: string, value: T) {
@@ -101,21 +102,27 @@ function buildMasterIndexes(masterRows: any[], mstNameField: string | null) {
   const byExactKey = new Map<string, MasterCandidate[]>();
   const byToken = new Map<string, MasterCandidate[]>();
   const byPrefix = new Map<string, MasterCandidate[]>();
+  const bySurname = new Map<string, MasterCandidate[]>();
+  const bySurnamePrefix = new Map<string, MasterCandidate[]>();
 
   for (const row of masterRows) {
     const name = mstNameField ? String((row.data as any)?.[mstNameField] ?? "") : "";
     const tokenList = tokens(name);
     const exactKey = row.name_key || nameKey(name);
+    const surname = tokenList[tokenList.length - 1] ?? "";
     const candidate: MasterCandidate = {
       id: row.id,
       data: row.data as Record<string, any>,
       name,
       tokenList,
       name_key: exactKey,
+      surname,
     };
 
     candidates.push(candidate);
     pushIndex(byExactKey, exactKey, candidate);
+    pushIndex(bySurname, surname, candidate);
+    if (surname.length >= 4) pushIndex(bySurnamePrefix, surname.slice(0, 4), candidate);
 
     for (const token of new Set(tokenList)) {
       pushIndex(byToken, token, candidate);
@@ -123,7 +130,7 @@ function buildMasterIndexes(masterRows: any[], mstNameField: string | null) {
     }
   }
 
-  return { candidates, byExactKey, byToken, byPrefix };
+  return { candidates, byExactKey, byToken, byPrefix, bySurname, bySurnamePrefix };
 }
 
 function candidatePoolForName(
@@ -132,12 +139,17 @@ function candidatePoolForName(
 ) {
   const srcTokens = tokens(srcName);
   const uniqueTokens = [...new Set(srcTokens)];
+  const surname = srcTokens[srcTokens.length - 1] ?? "";
   const pool = new Map<string, MasterCandidate>();
   const addMany = (rows?: MasterCandidate[]) => {
     rows?.forEach((row) => pool.set(row.id, row));
   };
 
-  addMany(indexes.byExactKey.get(nameKey(srcName)));
+  const exact = indexes.byExactKey.get(nameKey(srcName));
+  if (exact?.length) return exact;
+
+  addMany(indexes.bySurname.get(surname));
+  if (surname.length >= 4) addMany(indexes.bySurnamePrefix.get(surname.slice(0, 4)));
 
   const informativeTokens = uniqueTokens
     .filter((token) => token.length >= 3)
@@ -160,16 +172,43 @@ function candidatePoolForName(
     if (token.length >= 4) addMany(indexes.byPrefix.get(token.slice(0, 4)));
   }
 
-  if (pool.size < 10) {
-    for (const token of informativeTokens.slice(0, 4)) {
+  if (pool.size < 16) {
+    for (const token of informativeTokens.slice(0, 3)) {
       addMany(indexes.byToken.get(token));
       if (token.length >= 4) addMany(indexes.byPrefix.get(token.slice(0, 4)));
-      if (pool.size >= 50) break;
+      if (pool.size >= 32) break;
     }
   }
 
-  if (pool.size > 0) return [...pool.values()];
-  return indexes.candidates.length <= 1500 ? indexes.candidates : [];
+  if (pool.size === 0 && uniqueTokens.length > 0) {
+    const first = uniqueTokens[0];
+    addMany(indexes.byToken.get(first));
+    if (first.length >= 4) addMany(indexes.byPrefix.get(first.slice(0, 4)));
+  }
+
+  if (pool.size === 0) return [];
+
+  const overlapCount = (candidate: MasterCandidate) => {
+    let overlap = 0;
+    for (const token of uniqueTokens) {
+      if (candidate.tokenList.includes(token)) overlap += 1;
+    }
+    return overlap;
+  };
+
+  return [...pool.values()]
+    .sort((a, b) => {
+      const exactSurnameA = surname && a.surname === surname ? 1 : 0;
+      const exactSurnameB = surname && b.surname === surname ? 1 : 0;
+      if (exactSurnameA !== exactSurnameB) return exactSurnameB - exactSurnameA;
+
+      const overlapA = overlapCount(a);
+      const overlapB = overlapCount(b);
+      if (overlapA !== overlapB) return overlapB - overlapA;
+
+      return b.tokenList.length - a.tokenList.length;
+    })
+    .slice(0, 24);
 }
 
 /**
@@ -339,7 +378,8 @@ Deno.serve(async (req) => {
     if (runErr) throw runErr;
 
     const items: any[] = [];
-    for (const srow of source_rows as Record<string, any>[]) {
+    const sourceRows = source_rows as Record<string, any>[];
+    for (const srow of sourceRows) {
       const srcName = srcNameField ? String(srow[srcNameField] ?? "") : "";
       let best: { row: MasterCandidate; score: number } | null = null;
       if (srcName && mstNameField) {
@@ -348,6 +388,7 @@ Deno.serve(async (req) => {
           if (!mrow.name) continue;
           const s = nameMatchScore(srcName, mrow.name);
           if (!best || s > best.score) best = { row: mrow, score: s };
+          if (s === 100) break;
         }
       }
       const confidence = best?.score ?? 0;
@@ -385,6 +426,10 @@ Deno.serve(async (req) => {
         decision,
         diff,
       });
+    }
+
+    if (items.length !== sourceRows.length) {
+      throw new Error("Match processing incomplete");
     }
 
     // chunk insert

@@ -88,7 +88,6 @@ type MasterCandidate = {
   tokenList: string[];
   name_key: string;
   surname: string;
-  normalizedName: string;
 };
 
 function pushIndex<T>(map: Map<string, T[]>, key: string, value: T) {
@@ -118,7 +117,6 @@ function buildMasterIndexes(masterRows: any[], mstNameField: string | null) {
       tokenList,
       name_key: exactKey,
       surname,
-      normalizedName: norm(name),
     };
 
     candidates.push(candidate);

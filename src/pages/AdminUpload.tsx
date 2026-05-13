@@ -72,6 +72,67 @@ const AdminUpload = () => {
   });
   const [savingAdd, setSavingAdd] = useState(false);
 
+  // Global search across all batches
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [allRecords, setAllRecords] = useState<GlobalStaffRecord[]>([]);
+  const [loadingAll, setLoadingAll] = useState(false);
+  const [allLoaded, setAllLoaded] = useState(false);
+  const [globalEditingId, setGlobalEditingId] = useState<string | null>(null);
+  const [globalEditData, setGlobalEditData] = useState<Partial<StaffRecord>>({});
+
+  const loadAllRecords = async () => {
+    if (allLoaded || loadingAll) return;
+    setLoadingAll(true);
+    try {
+      const data = await fetchAllFromTable("id, full_name, role, department, state, company, batch_id");
+      setAllRecords(data as GlobalStaffRecord[]);
+      setAllLoaded(true);
+    } catch {
+      toast.error("Failed to load staff records");
+    }
+    setLoadingAll(false);
+  };
+
+  const saveGlobalEdit = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("verified_staff")
+        .update({
+          full_name: (globalEditData.full_name || "").toUpperCase(),
+          role: (globalEditData.role || "").toUpperCase(),
+          department: globalEditData.department ? String(globalEditData.department).toUpperCase() : null,
+          state: globalEditData.state ? String(globalEditData.state).toUpperCase() : null,
+          company: globalEditData.company ? String(globalEditData.company).toUpperCase() : null,
+        })
+        .eq("id", id);
+      if (error) throw error;
+      setAllRecords((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                full_name: (globalEditData.full_name || r.full_name).toUpperCase(),
+                role: (globalEditData.role || r.role).toUpperCase(),
+                department: globalEditData.department ? String(globalEditData.department).toUpperCase() : null,
+                state: globalEditData.state ? String(globalEditData.state).toUpperCase() : null,
+                company: globalEditData.company ? String(globalEditData.company).toUpperCase() : null,
+              }
+            : r
+        )
+      );
+      // Also reflect change in batch view if open
+      setBatchRecords((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, ...globalEditData } as StaffRecord : r))
+      );
+      setGlobalEditingId(null);
+      setGlobalEditData({});
+      invalidateVerifiedStaffCache();
+      toast.success("Record updated");
+    } catch (err: any) {
+      toast.error("Failed to update: " + err.message);
+    }
+  };
+
   const fetchAllFromTable = async (select: string, filter?: { col: string; val: string }) => {
     let all: any[] = [];
     let from = 0;

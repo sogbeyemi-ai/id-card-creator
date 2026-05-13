@@ -11,6 +11,27 @@ import { ArrowLeft, Check, X, Download } from "lucide-react";
 import { toast } from "sonner";
 import { confidenceBadge, exportToXlsx } from "@/lib/dataSync";
 
+async function fetchAllRows(table: string, select: string, filters: { column: string; value: string }[]) {
+  const pageSize = 1000;
+  const maxRows = 10000;
+  const collected: any[] = [];
+  let from = 0;
+
+  while (collected.length < maxRows) {
+    const to = Math.min(from + pageSize - 1, maxRows - 1);
+    let query = supabase.from(table as any).select(select).range(from, to);
+    for (const filter of filters) query = query.eq(filter.column, filter.value);
+    const { data, error } = await query;
+    if (error) throw error;
+    const page = (data as any[]) || [];
+    collected.push(...page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return collected;
+}
+
 export default function AdminDataSyncRun() {
   const { workspaceId, runId } = useParams();
   const navigate = useNavigate();
@@ -47,14 +68,14 @@ export default function AdminDataSyncRun() {
     (async () => {
       const { data: r } = await supabase.from("sync_runs" as any).select("*").eq("id", runId).single();
       setRun(r);
-      const { data: it } = await supabase.from("sync_run_items" as any).select("*").eq("run_id", runId);
-      setItems((it as any) || []);
+      const it = await fetchAllRows("sync_run_items", "*", [{ column: "run_id", value: runId! }]);
+      setItems(it);
       const { data: sheet } = await supabase.from("sync_master_sheets" as any)
         .select("headers").eq("workspace_id", workspaceId)
         .order("uploaded_at", { ascending: false }).limit(1).maybeSingle();
       setMasterHeaders(((sheet as any)?.headers as string[]) || []);
-      const { data: mr } = await supabase.from("sync_master_rows" as any).select("id, data").eq("workspace_id", workspaceId);
-      setMasterRows((mr as any) || []);
+      const mr = await fetchAllRows("sync_master_rows", "id, data", [{ column: "workspace_id", value: workspaceId! }]);
+      setMasterRows(mr);
 
       // default decisions
       const def: Record<string, any> = {};
@@ -93,9 +114,8 @@ export default function AdminDataSyncRun() {
   };
 
   const downloadUpdatedMaster = async () => {
-    const { data: mr } = await supabase.from("sync_master_rows" as any)
-      .select("data").eq("workspace_id", workspaceId).limit(10000);
-    const rows = ((mr as any) || []).map((r: any) => r.data);
+      const mr = await fetchAllRows("sync_master_rows", "data", [{ column: "workspace_id", value: workspaceId! }]);
+    const rows = (mr || []).map((r: any) => r.data);
     if (!rows.length) { toast.error("Master is empty"); return; }
     const stamp = new Date().toISOString().slice(0, 10);
     exportToXlsx(masterHeaders, rows, `master-updated-${stamp}.xlsx`);

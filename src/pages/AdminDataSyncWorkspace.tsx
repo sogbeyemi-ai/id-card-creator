@@ -14,6 +14,30 @@ import { Progress } from "@/components/ui/progress";
 
 interface MasterRow { id: string; data: Record<string, any>; }
 
+async function fetchMasterRows(workspaceId: string) {
+  const pageSize = 1000;
+  const maxRows = 10000;
+  const collected: MasterRow[] = [];
+  let from = 0;
+
+  while (collected.length < maxRows) {
+    const to = Math.min(from + pageSize - 1, maxRows - 1);
+    const { data, error } = await supabase
+      .from("sync_master_rows" as any)
+      .select("id, data")
+      .eq("workspace_id", workspaceId)
+      .range(from, to);
+
+    if (error) throw error;
+    const page = ((data as any) || []) as MasterRow[];
+    collected.push(...page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return collected;
+}
+
 export default function AdminDataSyncWorkspace() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
@@ -35,9 +59,7 @@ export default function AdminDataSyncWorkspace() {
       .from("sync_master_sheets" as any).select("headers").eq("workspace_id", workspaceId)
       .order("uploaded_at", { ascending: false }).limit(1).maybeSingle();
     setHeaders(((sheet as any)?.headers as string[]) || []);
-    const { data: mr } = await supabase
-      .from("sync_master_rows" as any).select("id, data").eq("workspace_id", workspaceId).limit(10000);
-    setRows((mr as any) || []);
+    setRows(await fetchMasterRows(workspaceId!));
     const { data: rs } = await supabase
       .from("sync_runs" as any).select("*").eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false });

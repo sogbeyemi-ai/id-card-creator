@@ -315,6 +315,28 @@ function pickNameField(headers: string[]): string | null {
   return best && best.s >= 0.5 ? best.h : null;
 }
 
+async function fetchAllMasterRows(supabase: ReturnType<typeof createClient>, workspaceId: string) {
+  const pageSize = 1000;
+  const maxRows = 10000;
+  const rows: any[] = [];
+
+  for (let from = 0; from < maxRows; from += pageSize) {
+    const to = Math.min(from + pageSize - 1, maxRows - 1);
+    const { data, error } = await supabase
+      .from("sync_master_rows")
+      .select("id, data, name_key")
+      .eq("workspace_id", workspaceId)
+      .range(from, to);
+
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -351,12 +373,7 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
     const masterHeaders: string[] = (sheet?.headers as string[]) || [];
-    const { data: masterRows } = await supabase
-      .from("sync_master_rows")
-      .select("id, data, name_key")
-      .eq("workspace_id", workspace_id)
-      .limit(10000);
-    const master = masterRows ?? [];
+    const master = await fetchAllMasterRows(supabase, workspace_id);
 
     const headerMapping = alignHeaders(source_headers, masterHeaders);
     const srcNameField = pickNameField(source_headers);

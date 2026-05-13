@@ -354,7 +354,8 @@ Deno.serve(async (req) => {
     const { data: masterRows } = await supabase
       .from("sync_master_rows")
       .select("id, data, name_key")
-      .eq("workspace_id", workspace_id);
+      .eq("workspace_id", workspace_id)
+      .limit(10000);
     const master = masterRows ?? [];
 
     const headerMapping = alignHeaders(source_headers, masterHeaders);

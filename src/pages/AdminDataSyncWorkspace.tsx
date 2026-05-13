@@ -36,7 +36,7 @@ export default function AdminDataSyncWorkspace() {
       .order("uploaded_at", { ascending: false }).limit(1).maybeSingle();
     setHeaders(((sheet as any)?.headers as string[]) || []);
     const { data: mr } = await supabase
-      .from("sync_master_rows" as any).select("id, data").eq("workspace_id", workspaceId).limit(5000);
+      .from("sync_master_rows" as any).select("id, data").eq("workspace_id", workspaceId).limit(10000);
     setRows((mr as any) || []);
     const { data: rs } = await supabase
       .from("sync_runs" as any).select("*").eq("workspace_id", workspaceId)

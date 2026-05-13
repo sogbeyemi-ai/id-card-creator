@@ -233,6 +233,9 @@ const AdminUpload = () => {
 
       // Instantly add to current view
       setBatchRecords((prev) => [data as StaffRecord, ...prev]);
+      if (allLoaded) {
+        setAllRecords((prev) => [{ ...(data as StaffRecord), batch_id: batchId }, ...prev]);
+      }
       // Bump record count on the batch list
       setBatches((prev) =>
         prev.map((b) =>

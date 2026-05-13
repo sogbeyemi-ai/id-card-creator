@@ -340,6 +340,8 @@ const AdminUpload = () => {
       invalidateVerifiedStaffCache();
       setFiles([]);
       fetchBatches();
+      setAllLoaded(false);
+      setAllRecords([]);
     } catch (error: any) {
       toast.error(error.message);
     } finally {

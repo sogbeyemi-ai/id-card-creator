@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
     if (!run) throw new Error("Run not found");
     const headerMapping = run.header_mapping as Record<string, string | null>;
 
-    const { data: items } = await supabase.from("sync_run_items").select("*").eq("run_id", run_id);
+    const { data: items } = await supabase.from("sync_run_items").select("*").eq("run_id", run_id).limit(10000);
     if (!items) throw new Error("No items");
 
     const { data: sheet } = await supabase

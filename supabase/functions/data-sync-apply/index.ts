@@ -12,6 +12,28 @@ function nameKey(name: string) {
   return norm(name).split(" ").filter(Boolean).sort().join(" ");
 }
 
+async function fetchAllRunItems(supabase: ReturnType<typeof createClient>, runId: string) {
+  const pageSize = 1000;
+  const maxRows = 10000;
+  const rows: any[] = [];
+
+  for (let from = 0; from < maxRows; from += pageSize) {
+    const to = Math.min(from + pageSize - 1, maxRows - 1);
+    const { data, error } = await supabase
+      .from("sync_run_items")
+      .select("*")
+      .eq("run_id", runId)
+      .range(from, to);
+
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -42,7 +64,7 @@ Deno.serve(async (req) => {
     if (!run) throw new Error("Run not found");
     const headerMapping = run.header_mapping as Record<string, string | null>;
 
-    const { data: items } = await supabase.from("sync_run_items").select("*").eq("run_id", run_id).limit(10000);
+    const items = await fetchAllRunItems(supabase, run_id);
     if (!items) throw new Error("No items");
 
     const { data: sheet } = await supabase

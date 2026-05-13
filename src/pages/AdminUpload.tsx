@@ -422,6 +422,116 @@ const AdminUpload = () => {
         )}
       </Card>
 
+      {/* Global Search Across All Batches */}
+      <div className="mt-8 space-y-3">
+        <div>
+          <h2 className="font-display text-lg font-semibold">Search All Uploaded Staff</h2>
+          <p className="text-xs text-muted-foreground">Search across every uploaded batch at once — by name, role, department, state, or company.</p>
+        </div>
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+            <Input
+              placeholder="Search all staff records…"
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+              onFocus={loadAllRecords}
+              className="h-9 text-sm"
+            />
+          </div>
+          {loadingAll && <p className="text-xs text-muted-foreground">Loading all records…</p>}
+          {allLoaded && globalSearch.trim().length === 0 && (
+            <p className="text-xs text-muted-foreground">{allRecords.length} total records loaded. Type to search.</p>
+          )}
+          {allLoaded && globalSearch.trim().length > 0 && (() => {
+            const term = globalSearch.toUpperCase();
+            const matches = allRecords.filter((r) =>
+              r.full_name.toUpperCase().includes(term) ||
+              r.role.toUpperCase().includes(term) ||
+              (r.department || "").toUpperCase().includes(term) ||
+              (r.state || "").toUpperCase().includes(term) ||
+              (r.company || "").toUpperCase().includes(term)
+            );
+            return (
+              <>
+                <p className="text-xs text-muted-foreground">{matches.length} match{matches.length === 1 ? "" : "es"}</p>
+                <div className="max-h-96 overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Full Name</TableHead>
+                        <TableHead className="text-xs">Role</TableHead>
+                        <TableHead className="text-xs">Department</TableHead>
+                        <TableHead className="text-xs">State</TableHead>
+                        <TableHead className="text-xs">Company</TableHead>
+                        <TableHead className="text-xs">Batch</TableHead>
+                        <TableHead className="text-xs w-20">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {matches.slice(0, 200).map((record) => (
+                        <TableRow key={record.id}>
+                          {globalEditingId === record.id ? (
+                            <>
+                              <TableCell><Input value={globalEditData.full_name || ""} onChange={(e) => setGlobalEditData((d) => ({ ...d, full_name: e.target.value }))} className="h-7 text-xs" /></TableCell>
+                              <TableCell><Input value={globalEditData.role || ""} onChange={(e) => setGlobalEditData((d) => ({ ...d, role: e.target.value }))} className="h-7 text-xs" /></TableCell>
+                              <TableCell><Input value={globalEditData.department || ""} onChange={(e) => setGlobalEditData((d) => ({ ...d, department: e.target.value }))} className="h-7 text-xs" /></TableCell>
+                              <TableCell><Input value={globalEditData.state || ""} onChange={(e) => setGlobalEditData((d) => ({ ...d, state: e.target.value }))} className="h-7 text-xs" /></TableCell>
+                              <TableCell><Input value={globalEditData.company || ""} onChange={(e) => setGlobalEditData((d) => ({ ...d, company: e.target.value }))} className="h-7 text-xs" /></TableCell>
+                              <TableCell className="text-[10px] text-muted-foreground">{(record.batch_id || "—").slice(0, 8)}</TableCell>
+                              <TableCell>
+                                <div className="flex gap-1">
+                                  <button onClick={() => saveGlobalEdit(record.id)} className="text-accent hover:text-accent/80"><Save className="w-4 h-4" /></button>
+                                  <button onClick={() => { setGlobalEditingId(null); setGlobalEditData({}); }} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+                                </div>
+                              </TableCell>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell className="text-xs font-medium">{record.full_name}</TableCell>
+                              <TableCell className="text-xs">{record.role}</TableCell>
+                              <TableCell className="text-xs">{record.department || "—"}</TableCell>
+                              <TableCell className="text-xs">{record.state || "—"}</TableCell>
+                              <TableCell className="text-xs">{record.company || "—"}</TableCell>
+                              <TableCell className="text-[10px] text-muted-foreground">{(record.batch_id || "—").slice(0, 8)}</TableCell>
+                              <TableCell>
+                                <button
+                                  onClick={() => {
+                                    setGlobalEditingId(record.id);
+                                    setGlobalEditData({
+                                      full_name: record.full_name,
+                                      role: record.role,
+                                      department: record.department,
+                                      state: record.state,
+                                      company: record.company,
+                                    });
+                                  }}
+                                  className="text-accent hover:text-accent/80"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                              </TableCell>
+                            </>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {matches.length > 200 && (
+                    <p className="text-xs text-muted-foreground text-center py-2">
+                      Showing first 200 of {matches.length} matches. Refine your search to narrow results.
+                    </p>
+                  )}
+                  {matches.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-4">No records match "{globalSearch}".</p>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </Card>
+      </div>
+
       {/* Uploaded Batches */}
       <h2 className="font-display text-lg font-semibold mt-8">Uploaded File Batches</h2>
       {loadingBatches ? (

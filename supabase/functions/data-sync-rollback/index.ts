@@ -5,6 +5,28 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function fetchAllSnapshots(supabase: ReturnType<typeof createClient>, runId: string) {
+  const pageSize = 1000;
+  const maxRows = 10000;
+  const rows: any[] = [];
+
+  for (let from = 0; from < maxRows; from += pageSize) {
+    const to = Math.min(from + pageSize - 1, maxRows - 1);
+    const { data, error } = await supabase
+      .from("sync_snapshots")
+      .select("*")
+      .eq("run_id", runId)
+      .range(from, to);
+
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -25,7 +47,7 @@ Deno.serve(async (req) => {
       });
     }
     const { run_id } = await req.json();
-    const { data: snaps } = await supabase.from("sync_snapshots").select("*").eq("run_id", run_id).limit(10000);
+    const snaps = await fetchAllSnapshots(supabase, run_id);
     if (!snaps) throw new Error("No snapshots");
     for (const s of snaps) {
       if (!s.master_row_id) continue;

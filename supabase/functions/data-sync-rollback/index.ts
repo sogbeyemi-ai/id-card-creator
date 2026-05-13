@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
       });
     }
     const { run_id } = await req.json();
-    const { data: snaps } = await supabase.from("sync_snapshots").select("*").eq("run_id", run_id);
+    const { data: snaps } = await supabase.from("sync_snapshots").select("*").eq("run_id", run_id).limit(10000);
     if (!snaps) throw new Error("No snapshots");
     for (const s of snaps) {
       if (!s.master_row_id) continue;

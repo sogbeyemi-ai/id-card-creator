@@ -300,6 +300,8 @@ const AdminUpload = () => {
         setBatchRecords([]);
       }
       fetchBatches();
+      setAllLoaded(false);
+      setAllRecords([]);
     } catch (err: any) {
       toast.error("Failed to delete: " + err.message);
     } finally {

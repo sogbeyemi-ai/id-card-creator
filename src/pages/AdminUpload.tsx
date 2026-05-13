@@ -40,6 +40,10 @@ interface StaffRecord {
   company: string | null;
 }
 
+interface GlobalStaffRecord extends StaffRecord {
+  batch_id: string | null;
+}
+
 const AdminUpload = () => {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);

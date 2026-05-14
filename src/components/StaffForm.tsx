@@ -23,7 +23,7 @@ export interface StaffFormData {
   fullName: string;
   roleDepartment: string;
   state: string;
-  company: CompanyTemplate;
+  company: CompanyTemplate | "";
   photo: File | null;
   photoPreview: string | null;
 }

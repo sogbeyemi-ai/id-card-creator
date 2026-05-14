@@ -204,10 +204,21 @@ const AdminEntries = () => {
     setTrashLoading(false);
   };
 
+  const fetchLatestBatch = async () => {
+    const { data } = await supabase
+      .from("bulk_download_batches")
+      .select("*")
+      .order("batch_number", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setLatestBatch((data as BulkBatch) || null);
+  };
+
   useEffect(() => {
     fetchEntries();
     fetchVerifiedStaff();
     fetchTrash();
+    fetchLatestBatch();
   }, []);
 
   useEffect(() => {

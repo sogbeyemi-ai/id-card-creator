@@ -1401,6 +1401,20 @@ const AdminEntries = () => {
                     onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
                   />
                 </div>
+                <div className="space-y-1">
+                  <Label>Company Template</Label>
+                  <Select
+                    value={editForm.company}
+                    onValueChange={(v) => setEditForm({ ...editForm, company: v as CompanyTemplate })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SOTI">SOTI</SelectItem>
+                      <SelectItem value="OPAY">OPAY</SelectItem>
+                      <SelectItem value="Blue Ridge">Blue Ridge</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setEditEntry(null)}>

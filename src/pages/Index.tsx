@@ -120,7 +120,7 @@ const Index = () => {
         fullName: entry.full_name,
         roleDepartment: data.roleDepartment,
         state: data.state || "",
-        company: entry.company as StaffFormData["company"],
+        company: entry.company as Exclude<StaffFormData["company"], "">,
         photoUrl: entry.photo_url,
         id: entry.id,
         downloadLocked: false,

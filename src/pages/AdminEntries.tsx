@@ -100,9 +100,15 @@ const AdminEntries = () => {
   const [cityFilter, setCityFilter] = useState<string>("all");
   const [roleDeptFilter, setRoleDeptFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [bulkFilter, setBulkFilter] = useState<"all" | "never" | "last" | "any">("all");
   const [dateField, setDateField] = useState<"created_at" | "downloaded_at">("created_at");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+
+  // Bulk batch tracking
+  const [latestBatch, setLatestBatch] = useState<BulkBatch | null>(null);
+  const [confirmBulkOpen, setConfirmBulkOpen] = useState(false);
+  const [pendingBulkSkipBatched, setPendingBulkSkipBatched] = useState(false);
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

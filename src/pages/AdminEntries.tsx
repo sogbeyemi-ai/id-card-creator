@@ -1331,8 +1331,21 @@ const AdminEntries = () => {
               </Select>
             </div>
 
-            {/* Date range filter */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            {/* Bulk status + Date range filters */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+              <Select value={bulkFilter} onValueChange={(v: "all" | "never" | "last" | "any") => setBulkFilter(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Bulk status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All (any bulk status)</SelectItem>
+                  <SelectItem value="never">Not yet bulk-downloaded</SelectItem>
+                  {latestBatch && (
+                    <SelectItem value="last">In last batch (#{latestBatch.batch_number})</SelectItem>
+                  )}
+                  <SelectItem value="any">In any past batch</SelectItem>
+                </SelectContent>
+              </Select>
               <Select
                 value={dateField}
                 onValueChange={(v: "created_at" | "downloaded_at") => setDateField(v)}

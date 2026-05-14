@@ -590,11 +590,33 @@ const AdminEntries = () => {
 
       const stamp = new Date().toISOString().slice(0, 10);
       const cityTag = cityFilter !== "all" ? `_${sanitize(cityFilter)}` : "";
-      const filename = `id_cards${cityTag}_${stamp}.zip`;
+
+      // Create the batch record (gets an auto-incrementing batch_number)
+      const successfullyZipped = targets.filter(
+        (t) => !failedEntries.some((f) => f.entry.id === t.id)
+      );
+      let batchNumber: number | null = null;
+      if (successfullyZipped.length > 0) {
+        const provisionalName = `id_cards${cityTag}_${stamp}.zip`;
+        const { data: batchRow, error: batchErr } = await supabase
+          .from("bulk_download_batches")
+          .insert({ entry_count: successfullyZipped.length, label: provisionalName })
+          .select()
+          .single();
+        if (batchErr) {
+          console.error("failed to create bulk batch", batchErr);
+        } else if (batchRow) {
+          batchNumber = (batchRow as BulkBatch).batch_number;
+        }
+      }
+
+      const filename = batchNumber
+        ? `id_cards${cityTag}_batch${batchNumber}_${stamp}.zip`
+        : `id_cards${cityTag}_${stamp}.zip`;
 
       const saved: SavedDownload = {
         id: crypto.randomUUID(),
-        name: filename,
+        name: batchNumber ? `Batch #${batchNumber} — ${filename}` : filename,
         blob: zipBlob,
         sizeKb: Math.round(zipBlob.size / 1024),
         count: added,
@@ -604,15 +626,26 @@ const AdminEntries = () => {
 
       triggerBlobDownload(zipBlob, filename);
 
-      const successfulIds = targets
-        .filter((t) => !failedEntries.some((f) => f.entry.id === t.id) && !t.downloaded_at)
-        .map((t) => t.id);
+      const successfulIds = successfullyZipped.map((t) => t.id);
       if (successfulIds.length > 0) {
+        const nowIso = new Date().toISOString();
+        const updatePayload: Record<string, any> = { bulk_downloaded_at: nowIso };
+        if (batchNumber) updatePayload.bulk_batch_number = batchNumber;
+        // Also stamp downloaded_at for first-time downloads
+        const firstTimeIds = successfullyZipped.filter((t) => !t.downloaded_at).map((t) => t.id);
+        if (firstTimeIds.length > 0) {
+          await supabase
+            .from("staff_entries")
+            .update({ downloaded_at: nowIso })
+            .in("id", firstTimeIds);
+        }
         await supabase
           .from("staff_entries")
-          .update({ downloaded_at: new Date().toISOString() })
+          .update(updatePayload)
           .in("id", successfulIds);
       }
+      if (batchNumber) await fetchLatestBatch();
+
 
       if (failedEntries.length > 0) {
         const names = failedEntries.slice(0, 3).map((f) => f.entry.full_name).join(", ");

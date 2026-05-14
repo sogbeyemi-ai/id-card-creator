@@ -116,7 +116,7 @@ const AdminEntries = () => {
 
   // Edit dialog
   const [editEntry, setEditEntry] = useState<StaffEntry | null>(null);
-  const [editForm, setEditForm] = useState({ full_name: "", roleDept: "", state: "" });
+  const [editForm, setEditForm] = useState<{ full_name: string; roleDept: string; state: string; company: CompanyTemplate }>({ full_name: "", roleDept: "", state: "", company: "SOTI" });
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 

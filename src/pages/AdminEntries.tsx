@@ -607,6 +607,7 @@ const AdminEntries = () => {
       full_name: entry.full_name,
       roleDept: [entry.role, entry.department].filter(Boolean).join("-"),
       state: entry.state || "",
+      company: (entry.company as CompanyTemplate) || "SOTI",
     });
   };
 

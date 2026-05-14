@@ -336,6 +336,7 @@ const AdminEntries = () => {
     setCityFilter("all");
     setRoleDeptFilter("all");
     setStatusFilter("all");
+    setBulkFilter("all");
     setDateField("created_at");
     setDateFrom("");
     setDateTo("");

@@ -500,6 +500,19 @@ const AdminEntries = () => {
       toast.error("Select at least one record");
       return;
     }
+    const previouslyBatched = targets.filter((t) => t.bulk_batch_number);
+    if (previouslyBatched.length > 0) {
+      setConfirmBulkOpen(true);
+      return;
+    }
+    await runBulkDownload(targets);
+  };
+
+  const runBulkDownload = async (targets: StaffEntry[]) => {
+    if (targets.length === 0) {
+      toast.error("Nothing to download after filtering");
+      return;
+    }
     setBulkDownloading(true);
     setBulkProgress(0);
     setBulkStatus(`Rendering 0 / ${targets.length}…`);

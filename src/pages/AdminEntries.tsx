@@ -1610,6 +1610,60 @@ const AdminEntries = () => {
             </AlertDialogContent>
           </AlertDialog>
 
+          {/* Confirm bulk download with previously-batched rows */}
+          <AlertDialog open={confirmBulkOpen} onOpenChange={setConfirmBulkOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Some IDs were already bulk-downloaded</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {(() => {
+                    const targets = entries.filter((e) => selectedIds.has(e.id));
+                    const batched = targets.filter((t) => t.bulk_batch_number);
+                    const fresh = targets.length - batched.length;
+                    const batches = Array.from(new Set(batched.map((t) => t.bulk_batch_number))).sort((a, b) => (b ?? 0) - (a ?? 0));
+                    return (
+                      <>
+                        <strong>{batched.length}</strong> of <strong>{targets.length}</strong> selected IDs were
+                        already part of a previous bulk download
+                        {batches.length > 0 && <> (Batch {batches.map((n) => `#${n}`).join(", ")})</>}.
+                        Only <strong>{fresh}</strong> {fresh === 1 ? "is" : "are"} new.
+                        <br />
+                        <br />
+                        Choose how to proceed:
+                      </>
+                    );
+                  })()}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    setConfirmBulkOpen(false);
+                    const targets = entries.filter((e) => selectedIds.has(e.id) && !e.bulk_batch_number);
+                    if (targets.length === 0) {
+                      toast.info("No new IDs to download");
+                      return;
+                    }
+                    await runBulkDownload(targets);
+                  }}
+                >
+                  Skip already-downloaded
+                </Button>
+                <AlertDialogAction
+                  onClick={async () => {
+                    setConfirmBulkOpen(false);
+                    const targets = entries.filter((e) => selectedIds.has(e.id));
+                    await runBulkDownload(targets);
+                  }}
+                >
+                  Download all anyway
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
           {/* Confirm delete */}
           <AlertDialog
             open={deleteTargets.length > 0}

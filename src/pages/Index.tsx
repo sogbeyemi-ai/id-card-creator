@@ -18,7 +18,7 @@ const Index = () => {
     fullName: string;
     roleDepartment: string;
     state: string;
-    company: StaffFormData["company"];
+    company: Exclude<StaffFormData["company"], "">;
     photoUrl: string;
     id: string;
     downloadLocked: boolean;

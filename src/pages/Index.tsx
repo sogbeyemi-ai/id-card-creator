@@ -18,7 +18,7 @@ const Index = () => {
     fullName: string;
     roleDepartment: string;
     state: string;
-    company: StaffFormData["company"];
+    company: Exclude<StaffFormData["company"], "">;
     photoUrl: string;
     id: string;
     downloadLocked: boolean;
@@ -107,7 +107,7 @@ const Index = () => {
           full_name: data.fullName,
           role: data.roleDepartment.split("-")[0]?.trim() || data.roleDepartment,
           department: data.roleDepartment.split("-").slice(1).join("-")?.trim() || "",
-          company: data.company,
+          company: data.company as Exclude<StaffFormData["company"], "">,
           photo_url: urlData.publicUrl,
           state: data.state,
         })
@@ -120,7 +120,7 @@ const Index = () => {
         fullName: entry.full_name,
         roleDepartment: data.roleDepartment,
         state: data.state || "",
-        company: entry.company as StaffFormData["company"],
+        company: entry.company as Exclude<StaffFormData["company"], "">,
         photoUrl: entry.photo_url,
         id: entry.id,
         downloadLocked: false,

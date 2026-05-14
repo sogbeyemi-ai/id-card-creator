@@ -23,7 +23,7 @@ export interface StaffFormData {
   fullName: string;
   roleDepartment: string;
   state: string;
-  company: CompanyTemplate;
+  company: CompanyTemplate | "";
   photo: File | null;
   photoPreview: string | null;
 }
@@ -41,7 +41,7 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
     fullName: "",
     roleDepartment: "",
     state: "",
-    company: "SOTI",
+    company: "",
     photo: null,
     photoPreview: null,
   });
@@ -196,6 +196,10 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
     }
     if (!formData.state) {
       setFormError("Please select your state");
+      return;
+    }
+    if (!formData.company) {
+      setFormError("Please select your company");
       return;
     }
     if (!formData.photo) {

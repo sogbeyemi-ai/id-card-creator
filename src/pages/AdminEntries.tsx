@@ -108,7 +108,7 @@ const AdminEntries = () => {
   // Bulk batch tracking
   const [latestBatch, setLatestBatch] = useState<BulkBatch | null>(null);
   const [confirmBulkOpen, setConfirmBulkOpen] = useState(false);
-  const [pendingBulkSkipBatched, setPendingBulkSkipBatched] = useState(false);
+  
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

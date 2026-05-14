@@ -1371,7 +1371,7 @@ const AdminEntries = () => {
               <DialogHeader>
                 <DialogTitle>Edit Staff Record</DialogTitle>
                 <DialogDescription>
-                  Update name, role-department, and city. Changes apply only to this generated ID record.
+                  Update name, role-department, city, and company. Changes apply only to this generated ID record.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">

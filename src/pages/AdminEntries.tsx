@@ -1411,6 +1411,8 @@ const AdminEntries = () => {
                 ) : (
                   filteredEntries.map((entry) => {
                     const rd = [entry.role, entry.department].filter(Boolean).join("-");
+                    const inLastBatch =
+                      latestBatch != null && entry.bulk_batch_number === latestBatch.batch_number;
                     return (
                       <TableRow
                         key={entry.id}
@@ -1418,6 +1420,8 @@ const AdminEntries = () => {
                         className={
                           lastSelectedId === entry.id
                             ? "bg-accent/15 hover:bg-accent/20 outline outline-2 outline-accent -outline-offset-2"
+                            : inLastBatch
+                            ? "bg-muted/40 hover:bg-muted/60"
                             : undefined
                         }
                       >

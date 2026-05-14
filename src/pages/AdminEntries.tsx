@@ -62,6 +62,16 @@ interface StaffEntry {
   downloaded_at: string | null;
   photo_url: string;
   deleted_at?: string | null;
+  bulk_batch_number?: number | null;
+  bulk_downloaded_at?: string | null;
+}
+
+interface BulkBatch {
+  id: string;
+  batch_number: number;
+  entry_count: number;
+  created_at: string;
+  label: string | null;
 }
 
 interface VerifiedStaff {
@@ -90,9 +100,15 @@ const AdminEntries = () => {
   const [cityFilter, setCityFilter] = useState<string>("all");
   const [roleDeptFilter, setRoleDeptFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [bulkFilter, setBulkFilter] = useState<"all" | "never" | "last" | "any">("all");
   const [dateField, setDateField] = useState<"created_at" | "downloaded_at">("created_at");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+
+  // Bulk batch tracking
+  const [latestBatch, setLatestBatch] = useState<BulkBatch | null>(null);
+  const [confirmBulkOpen, setConfirmBulkOpen] = useState(false);
+  
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -188,10 +204,21 @@ const AdminEntries = () => {
     setTrashLoading(false);
   };
 
+  const fetchLatestBatch = async () => {
+    const { data } = await supabase
+      .from("bulk_download_batches")
+      .select("*")
+      .order("batch_number", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setLatestBatch((data as BulkBatch) || null);
+  };
+
   useEffect(() => {
     fetchEntries();
     fetchVerifiedStaff();
     fetchTrash();
+    fetchLatestBatch();
   }, []);
 
   useEffect(() => {
@@ -250,6 +277,11 @@ const AdminEntries = () => {
         if (statusFilter === "generated" && downloaded) return false;
         if (statusFilter === "locked" && !e.download_locked) return false;
       }
+      if (bulkFilter !== "all") {
+        if (bulkFilter === "never" && e.bulk_batch_number) return false;
+        if (bulkFilter === "any" && !e.bulk_batch_number) return false;
+        if (bulkFilter === "last" && (!latestBatch || e.bulk_batch_number !== latestBatch.batch_number)) return false;
+      }
       if (fromTs !== null || toTs !== null) {
         const raw = dateField === "downloaded_at" ? e.downloaded_at : e.created_at;
         if (!raw) return false;
@@ -259,7 +291,7 @@ const AdminEntries = () => {
       }
       return true;
     });
-  }, [entries, searchTerm, cityFilter, roleDeptFilter, statusFilter, dateField, dateFrom, dateTo]);
+  }, [entries, searchTerm, cityFilter, roleDeptFilter, statusFilter, bulkFilter, latestBatch, dateField, dateFrom, dateTo]);
 
   const allFilteredSelected =
     filteredEntries.length > 0 && filteredEntries.every((e) => selectedIds.has(e.id));
@@ -304,6 +336,7 @@ const AdminEntries = () => {
     setCityFilter("all");
     setRoleDeptFilter("all");
     setStatusFilter("all");
+    setBulkFilter("all");
     setDateField("created_at");
     setDateFrom("");
     setDateTo("");
@@ -467,6 +500,19 @@ const AdminEntries = () => {
       toast.error("Select at least one record");
       return;
     }
+    const previouslyBatched = targets.filter((t) => t.bulk_batch_number);
+    if (previouslyBatched.length > 0) {
+      setConfirmBulkOpen(true);
+      return;
+    }
+    await runBulkDownload(targets);
+  };
+
+  const runBulkDownload = async (targets: StaffEntry[]) => {
+    if (targets.length === 0) {
+      toast.error("Nothing to download after filtering");
+      return;
+    }
     setBulkDownloading(true);
     setBulkProgress(0);
     setBulkStatus(`Rendering 0 / ${targets.length}…`);
@@ -544,11 +590,33 @@ const AdminEntries = () => {
 
       const stamp = new Date().toISOString().slice(0, 10);
       const cityTag = cityFilter !== "all" ? `_${sanitize(cityFilter)}` : "";
-      const filename = `id_cards${cityTag}_${stamp}.zip`;
+
+      // Create the batch record (gets an auto-incrementing batch_number)
+      const successfullyZipped = targets.filter(
+        (t) => !failedEntries.some((f) => f.entry.id === t.id)
+      );
+      let batchNumber: number | null = null;
+      if (successfullyZipped.length > 0) {
+        const provisionalName = `id_cards${cityTag}_${stamp}.zip`;
+        const { data: batchRow, error: batchErr } = await supabase
+          .from("bulk_download_batches")
+          .insert({ entry_count: successfullyZipped.length, label: provisionalName })
+          .select()
+          .single();
+        if (batchErr) {
+          console.error("failed to create bulk batch", batchErr);
+        } else if (batchRow) {
+          batchNumber = (batchRow as BulkBatch).batch_number;
+        }
+      }
+
+      const filename = batchNumber
+        ? `id_cards${cityTag}_batch${batchNumber}_${stamp}.zip`
+        : `id_cards${cityTag}_${stamp}.zip`;
 
       const saved: SavedDownload = {
         id: crypto.randomUUID(),
-        name: filename,
+        name: batchNumber ? `Batch #${batchNumber} — ${filename}` : filename,
         blob: zipBlob,
         sizeKb: Math.round(zipBlob.size / 1024),
         count: added,
@@ -558,15 +626,31 @@ const AdminEntries = () => {
 
       triggerBlobDownload(zipBlob, filename);
 
-      const successfulIds = targets
-        .filter((t) => !failedEntries.some((f) => f.entry.id === t.id) && !t.downloaded_at)
-        .map((t) => t.id);
+      const successfulIds = successfullyZipped.map((t) => t.id);
       if (successfulIds.length > 0) {
-        await supabase
-          .from("staff_entries")
-          .update({ downloaded_at: new Date().toISOString() })
-          .in("id", successfulIds);
+        const nowIso = new Date().toISOString();
+        // Also stamp downloaded_at for first-time downloads
+        const firstTimeIds = successfullyZipped.filter((t) => !t.downloaded_at).map((t) => t.id);
+        if (firstTimeIds.length > 0) {
+          await supabase
+            .from("staff_entries")
+            .update({ downloaded_at: nowIso })
+            .in("id", firstTimeIds);
+        }
+        if (batchNumber) {
+          await supabase
+            .from("staff_entries")
+            .update({ bulk_downloaded_at: nowIso, bulk_batch_number: batchNumber })
+            .in("id", successfulIds);
+        } else {
+          await supabase
+            .from("staff_entries")
+            .update({ bulk_downloaded_at: nowIso })
+            .in("id", successfulIds);
+        }
       }
+      if (batchNumber) await fetchLatestBatch();
+
 
       if (failedEntries.length > 0) {
         const names = failedEntries.slice(0, 3).map((f) => f.entry.full_name).join(", ");
@@ -882,6 +966,7 @@ const AdminEntries = () => {
     (cityFilter !== "all" ? 1 : 0) +
     (roleDeptFilter !== "all" ? 1 : 0) +
     (statusFilter !== "all" ? 1 : 0) +
+    (bulkFilter !== "all" ? 1 : 0) +
     (dateFrom || dateTo ? 1 : 0);
 
   const formatDateTime = (iso: string | null) => {
@@ -1141,6 +1226,46 @@ const AdminEntries = () => {
             </Card>
           )}
 
+          {/* Last bulk download banner */}
+          {latestBatch && (
+            <Card className="p-4 border-accent/40 bg-accent/5">
+              <div className="flex items-center gap-3 flex-wrap">
+                <PackageOpen className="w-5 h-5 text-accent shrink-0" />
+                <div className="flex-1 min-w-[200px]">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Last bulk download:</span>{" "}
+                    <span className="font-semibold">Batch #{latestBatch.batch_number}</span>{" "}
+                    <span className="text-muted-foreground">
+                      — {latestBatch.entry_count} ID{latestBatch.entry_count === 1 ? "" : "s"},{" "}
+                      {formatDateTime(latestBatch.created_at)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Rows highlighted below were part of this batch. Use the "Bulk status" filter to hide them.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={bulkFilter === "last" ? "default" : "outline"}
+                    onClick={() => setBulkFilter(bulkFilter === "last" ? "all" : "last")}
+                    className={bulkFilter === "last" ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}
+                  >
+                    Show only Batch #{latestBatch.batch_number}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={bulkFilter === "never" ? "default" : "outline"}
+                    onClick={() => setBulkFilter(bulkFilter === "never" ? "all" : "never")}
+                    className={bulkFilter === "never" ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}
+                  >
+                    Hide already-downloaded
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {/* Filter bar */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -1206,8 +1331,21 @@ const AdminEntries = () => {
               </Select>
             </div>
 
-            {/* Date range filter */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            {/* Bulk status + Date range filters */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+              <Select value={bulkFilter} onValueChange={(v: "all" | "never" | "last" | "any") => setBulkFilter(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Bulk status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All (any bulk status)</SelectItem>
+                  <SelectItem value="never">Not yet bulk-downloaded</SelectItem>
+                  {latestBatch && (
+                    <SelectItem value="last">In last batch (#{latestBatch.batch_number})</SelectItem>
+                  )}
+                  <SelectItem value="any">In any past batch</SelectItem>
+                </SelectContent>
+              </Select>
               <Select
                 value={dateField}
                 onValueChange={(v: "created_at" | "downloaded_at") => setDateField(v)}
@@ -1258,6 +1396,7 @@ const AdminEntries = () => {
                   <TableHead>Company</TableHead>
                   <TableHead>Generated</TableHead>
                   <TableHead>Downloaded</TableHead>
+                  <TableHead>Batch</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -1265,13 +1404,15 @@ const AdminEntries = () => {
               <TableBody>
                 {filteredEntries.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                       {loading ? "Filtering records…" : "No entries match the current filters"}
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredEntries.map((entry) => {
                     const rd = [entry.role, entry.department].filter(Boolean).join("-");
+                    const inLastBatch =
+                      latestBatch != null && entry.bulk_batch_number === latestBatch.batch_number;
                     return (
                       <TableRow
                         key={entry.id}
@@ -1279,6 +1420,8 @@ const AdminEntries = () => {
                         className={
                           lastSelectedId === entry.id
                             ? "bg-accent/15 hover:bg-accent/20 outline outline-2 outline-accent -outline-offset-2"
+                            : inLastBatch
+                            ? "bg-muted/40 hover:bg-muted/60"
                             : undefined
                         }
                       >
@@ -1311,6 +1454,24 @@ const AdminEntries = () => {
                         </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">
                           {formatDateTime(entry.downloaded_at)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {entry.bulk_batch_number ? (
+                            <Badge
+                              variant={inLastBatch ? "default" : "secondary"}
+                              className={`text-xs ${inLastBatch ? "bg-accent text-accent-foreground" : ""}`}
+                              title={
+                                entry.bulk_downloaded_at
+                                  ? `Bulk-downloaded ${formatDateTime(entry.bulk_downloaded_at)}`
+                                  : undefined
+                              }
+                            >
+                              #{entry.bulk_batch_number}
+                              {inLastBatch ? " · last" : ""}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           {entry.download_locked ? (
@@ -1444,6 +1605,60 @@ const AdminEntries = () => {
                 <AlertDialogCancel disabled={savingEdit}>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={confirmSaveEdit} disabled={savingEdit}>
                   {savingEdit ? "Saving…" : "Confirm & Save"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Confirm bulk download with previously-batched rows */}
+          <AlertDialog open={confirmBulkOpen} onOpenChange={setConfirmBulkOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Some IDs were already bulk-downloaded</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {(() => {
+                    const targets = entries.filter((e) => selectedIds.has(e.id));
+                    const batched = targets.filter((t) => t.bulk_batch_number);
+                    const fresh = targets.length - batched.length;
+                    const batches = Array.from(new Set(batched.map((t) => t.bulk_batch_number))).sort((a, b) => (b ?? 0) - (a ?? 0));
+                    return (
+                      <>
+                        <strong>{batched.length}</strong> of <strong>{targets.length}</strong> selected IDs were
+                        already part of a previous bulk download
+                        {batches.length > 0 && <> (Batch {batches.map((n) => `#${n}`).join(", ")})</>}.
+                        Only <strong>{fresh}</strong> {fresh === 1 ? "is" : "are"} new.
+                        <br />
+                        <br />
+                        Choose how to proceed:
+                      </>
+                    );
+                  })()}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    setConfirmBulkOpen(false);
+                    const targets = entries.filter((e) => selectedIds.has(e.id) && !e.bulk_batch_number);
+                    if (targets.length === 0) {
+                      toast.info("No new IDs to download");
+                      return;
+                    }
+                    await runBulkDownload(targets);
+                  }}
+                >
+                  Skip already-downloaded
+                </Button>
+                <AlertDialogAction
+                  onClick={async () => {
+                    setConfirmBulkOpen(false);
+                    const targets = entries.filter((e) => selectedIds.has(e.id));
+                    await runBulkDownload(targets);
+                  }}
+                >
+                  Download all anyway
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

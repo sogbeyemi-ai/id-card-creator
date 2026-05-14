@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      bulk_download_batches: {
+        Row: {
+          batch_number: number
+          created_at: string
+          created_by: string | null
+          entry_count: number
+          id: string
+          label: string | null
+        }
+        Insert: {
+          batch_number?: number
+          created_at?: string
+          created_by?: string | null
+          entry_count?: number
+          id?: string
+          label?: string | null
+        }
+        Update: {
+          batch_number?: number
+          created_at?: string
+          created_by?: string | null
+          entry_count?: number
+          id?: string
+          label?: string | null
+        }
+        Relationships: []
+      }
       download_logs: {
         Row: {
           downloaded_at: string
@@ -468,6 +495,8 @@ export type Database = {
       }
       staff_entries: {
         Row: {
+          bulk_batch_number: number | null
+          bulk_downloaded_at: string | null
           company: Database["public"]["Enums"]["company_template"]
           created_at: string
           deleted_at: string | null
@@ -484,6 +513,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bulk_batch_number?: number | null
+          bulk_downloaded_at?: string | null
           company: Database["public"]["Enums"]["company_template"]
           created_at?: string
           deleted_at?: string | null
@@ -500,6 +531,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bulk_batch_number?: number | null
+          bulk_downloaded_at?: string | null
           company?: Database["public"]["Enums"]["company_template"]
           created_at?: string
           deleted_at?: string | null

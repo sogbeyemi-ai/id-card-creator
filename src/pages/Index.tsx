@@ -107,7 +107,7 @@ const Index = () => {
           full_name: data.fullName,
           role: data.roleDepartment.split("-")[0]?.trim() || data.roleDepartment,
           department: data.roleDepartment.split("-").slice(1).join("-")?.trim() || "",
-          company: data.company,
+          company: data.company as Exclude<StaffFormData["company"], "">,
           photo_url: urlData.publicUrl,
           state: data.state,
         })

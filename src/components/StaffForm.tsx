@@ -198,6 +198,10 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
       setFormError("Please select your state");
       return;
     }
+    if (!formData.company) {
+      setFormError("Please select your company");
+      return;
+    }
     if (!formData.photo) {
       setFormError("Please upload or capture a passport photo");
       return;

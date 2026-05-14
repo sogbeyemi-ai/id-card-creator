@@ -1455,6 +1455,24 @@ const AdminEntries = () => {
                         <TableCell className="text-xs whitespace-nowrap">
                           {formatDateTime(entry.downloaded_at)}
                         </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {entry.bulk_batch_number ? (
+                            <Badge
+                              variant={inLastBatch ? "default" : "secondary"}
+                              className={`text-xs ${inLastBatch ? "bg-accent text-accent-foreground" : ""}`}
+                              title={
+                                entry.bulk_downloaded_at
+                                  ? `Bulk-downloaded ${formatDateTime(entry.bulk_downloaded_at)}`
+                                  : undefined
+                              }
+                            >
+                              #{entry.bulk_batch_number}
+                              {inLastBatch ? " · last" : ""}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           {entry.download_locked ? (
                             <Badge variant="destructive" className="text-xs">

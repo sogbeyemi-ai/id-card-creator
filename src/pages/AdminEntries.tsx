@@ -633,6 +633,7 @@ const AdminEntries = () => {
         role,
         department,
         state: editForm.state.trim() || null,
+        company: editForm.company,
       })
       .eq("id", editEntry.id);
 

@@ -116,7 +116,7 @@ const AdminEntries = () => {
 
   // Edit dialog
   const [editEntry, setEditEntry] = useState<StaffEntry | null>(null);
-  const [editForm, setEditForm] = useState({ full_name: "", roleDept: "", state: "" });
+  const [editForm, setEditForm] = useState<{ full_name: string; roleDept: string; state: string; company: CompanyTemplate }>({ full_name: "", roleDept: "", state: "", company: "SOTI" });
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -607,6 +607,7 @@ const AdminEntries = () => {
       full_name: entry.full_name,
       roleDept: [entry.role, entry.department].filter(Boolean).join("-"),
       state: entry.state || "",
+      company: (entry.company as CompanyTemplate) || "SOTI",
     });
   };
 
@@ -632,6 +633,7 @@ const AdminEntries = () => {
         role,
         department,
         state: editForm.state.trim() || null,
+        company: editForm.company,
       })
       .eq("id", editEntry.id);
 
@@ -1369,7 +1371,7 @@ const AdminEntries = () => {
               <DialogHeader>
                 <DialogTitle>Edit Staff Record</DialogTitle>
                 <DialogDescription>
-                  Update name, role-department, and city. Changes apply only to this generated ID record.
+                  Update name, role-department, city, and company. Changes apply only to this generated ID record.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
@@ -1398,6 +1400,20 @@ const AdminEntries = () => {
                     value={editForm.state}
                     onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
                   />
+                </div>
+                <div className="space-y-1">
+                  <Label>Company Template</Label>
+                  <Select
+                    value={editForm.company}
+                    onValueChange={(v) => setEditForm({ ...editForm, company: v as CompanyTemplate })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SOTI">SOTI</SelectItem>
+                      <SelectItem value="OPAY">OPAY</SelectItem>
+                      <SelectItem value="Blue Ridge">Blue Ridge</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <DialogFooter>

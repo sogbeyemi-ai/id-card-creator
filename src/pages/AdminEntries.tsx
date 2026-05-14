@@ -277,6 +277,11 @@ const AdminEntries = () => {
         if (statusFilter === "generated" && downloaded) return false;
         if (statusFilter === "locked" && !e.download_locked) return false;
       }
+      if (bulkFilter !== "all") {
+        if (bulkFilter === "never" && e.bulk_batch_number) return false;
+        if (bulkFilter === "any" && !e.bulk_batch_number) return false;
+        if (bulkFilter === "last" && (!latestBatch || e.bulk_batch_number !== latestBatch.batch_number)) return false;
+      }
       if (fromTs !== null || toTs !== null) {
         const raw = dateField === "downloaded_at" ? e.downloaded_at : e.created_at;
         if (!raw) return false;

@@ -915,6 +915,7 @@ const AdminEntries = () => {
     (cityFilter !== "all" ? 1 : 0) +
     (roleDeptFilter !== "all" ? 1 : 0) +
     (statusFilter !== "all" ? 1 : 0) +
+    (bulkFilter !== "all" ? 1 : 0) +
     (dateFrom || dateTo ? 1 : 0);
 
   const formatDateTime = (iso: string | null) => {

@@ -1226,6 +1226,46 @@ const AdminEntries = () => {
             </Card>
           )}
 
+          {/* Last bulk download banner */}
+          {latestBatch && (
+            <Card className="p-4 border-accent/40 bg-accent/5">
+              <div className="flex items-center gap-3 flex-wrap">
+                <PackageOpen className="w-5 h-5 text-accent shrink-0" />
+                <div className="flex-1 min-w-[200px]">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Last bulk download:</span>{" "}
+                    <span className="font-semibold">Batch #{latestBatch.batch_number}</span>{" "}
+                    <span className="text-muted-foreground">
+                      — {latestBatch.entry_count} ID{latestBatch.entry_count === 1 ? "" : "s"},{" "}
+                      {formatDateTime(latestBatch.created_at)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Rows highlighted below were part of this batch. Use the "Bulk status" filter to hide them.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={bulkFilter === "last" ? "default" : "outline"}
+                    onClick={() => setBulkFilter(bulkFilter === "last" ? "all" : "last")}
+                    className={bulkFilter === "last" ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}
+                  >
+                    Show only Batch #{latestBatch.batch_number}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={bulkFilter === "never" ? "default" : "outline"}
+                    onClick={() => setBulkFilter(bulkFilter === "never" ? "all" : "never")}
+                    className={bulkFilter === "never" ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}
+                  >
+                    Hide already-downloaded
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {/* Filter bar */}
           <Card className="p-4 space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">

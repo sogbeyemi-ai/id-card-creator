@@ -41,7 +41,7 @@ const StaffForm = ({ onSubmit, isSubmitting, verificationError }: StaffFormProps
     fullName: "",
     roleDepartment: "",
     state: "",
-    company: "SOTI",
+    company: "",
     photo: null,
     photoPreview: null,
   });

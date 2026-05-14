@@ -62,6 +62,16 @@ interface StaffEntry {
   downloaded_at: string | null;
   photo_url: string;
   deleted_at?: string | null;
+  bulk_batch_number?: number | null;
+  bulk_downloaded_at?: string | null;
+}
+
+interface BulkBatch {
+  id: string;
+  batch_number: number;
+  entry_count: number;
+  created_at: string;
+  label: string | null;
 }
 
 interface VerifiedStaff {

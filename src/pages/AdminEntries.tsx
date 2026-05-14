@@ -1396,6 +1396,7 @@ const AdminEntries = () => {
                   <TableHead>Company</TableHead>
                   <TableHead>Generated</TableHead>
                   <TableHead>Downloaded</TableHead>
+                  <TableHead>Batch</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -1403,7 +1404,7 @@ const AdminEntries = () => {
               <TableBody>
                 {filteredEntries.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                       {loading ? "Filtering records…" : "No entries match the current filters"}
                     </TableCell>
                   </TableRow>

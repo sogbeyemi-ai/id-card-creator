@@ -629,8 +629,6 @@ const AdminEntries = () => {
       const successfulIds = successfullyZipped.map((t) => t.id);
       if (successfulIds.length > 0) {
         const nowIso = new Date().toISOString();
-        const updatePayload: Record<string, any> = { bulk_downloaded_at: nowIso };
-        if (batchNumber) updatePayload.bulk_batch_number = batchNumber;
         // Also stamp downloaded_at for first-time downloads
         const firstTimeIds = successfullyZipped.filter((t) => !t.downloaded_at).map((t) => t.id);
         if (firstTimeIds.length > 0) {
@@ -639,10 +637,17 @@ const AdminEntries = () => {
             .update({ downloaded_at: nowIso })
             .in("id", firstTimeIds);
         }
-        await supabase
-          .from("staff_entries")
-          .update(updatePayload)
-          .in("id", successfulIds);
+        if (batchNumber) {
+          await supabase
+            .from("staff_entries")
+            .update({ bulk_downloaded_at: nowIso, bulk_batch_number: batchNumber })
+            .in("id", successfulIds);
+        } else {
+          await supabase
+            .from("staff_entries")
+            .update({ bulk_downloaded_at: nowIso })
+            .in("id", successfulIds);
+        }
       }
       if (batchNumber) await fetchLatestBatch();
 

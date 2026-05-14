@@ -291,7 +291,7 @@ const AdminEntries = () => {
       }
       return true;
     });
-  }, [entries, searchTerm, cityFilter, roleDeptFilter, statusFilter, dateField, dateFrom, dateTo]);
+  }, [entries, searchTerm, cityFilter, roleDeptFilter, statusFilter, bulkFilter, latestBatch, dateField, dateFrom, dateTo]);
 
   const allFilteredSelected =
     filteredEntries.length > 0 && filteredEntries.every((e) => selectedIds.has(e.id));

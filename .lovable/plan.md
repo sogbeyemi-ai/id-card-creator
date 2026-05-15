@@ -1,56 +1,38 @@
 ## Goal
-Make it obvious to admins which IDs were already part of a previous bulk download, so they don't accidentally re-download them.
+Make the Data Sync "Download updated master" (and workspace master export) produce a polished, well-structured Excel file instead of a plain dump.
 
 ## Approach
-Tag every bulk download with a **batch number** and stamp each included staff entry. Then surface that batch info clearly across the Admin Entries page: a banner for the last batch, a per-row badge, a new filter, and a pre-download warning when previously batched rows are reselected.
+Replace the current `xlsx` based `exportToXlsx` in `src/lib/dataSync.ts` with an **ExcelJS**-powered version. `xlsx` (SheetJS CE) has no real styling support; `exceljs` gives us colored headers, borders, alignment, frozen panes, auto-filter, and proper column widths — all client-side, no backend changes.
 
-## What changes for the admin (UX)
+## What the new export will include
 
-1. **"Last bulk download" banner** at the top of Admin Entries:
-   > Last bulk download: **Batch #12** — 47 IDs, May 14 2026 2:32 PM
-   With a "Show only Batch #12" quick filter button.
+1. **Branded header row**
+   - Bold white text on a deep navy fill (matches the app's corporate theme).
+   - Centered, taller row height, thin border.
+2. **Auto-sized columns**
+   - Width based on the longest value in each column (capped, e.g. min 12 / max 50) so nothing is clipped and nothing is absurdly wide.
+3. **Alignment & formatting**
+   - Text columns: left-aligned, vertical middle, wrap text on.
+   - Numeric columns (auto-detected): right-aligned with `#,##0.##` format.
+   - Date-like values (ISO strings / Date objects): formatted as `yyyy-mm-dd`.
+4. **Readability**
+   - Frozen header row (`views: [{ state: 'frozen', ySplit: 1 }]`).
+   - Auto-filter across the header range.
+   - Subtle zebra striping on alternate body rows.
+   - Thin light-gray borders on all used cells.
+5. **Sheet metadata**
+   - Sheet renamed to `Master` with a sensible workbook title/creator (`PROTEN ID Generator`).
+   - File still saved via a Blob + `URL.createObjectURL` download (no behavior change for the caller).
 
-2. **New "Batch" column** in the table — shows `#12` badge for rows previously included in any bulk download (empty for never-bulk-downloaded). Rows in the most recent batch get a subtle highlight color so they stand out at a glance.
+## Files to change
 
-3. **New filter dropdown** "Bulk status":
-   - All
-   - Not yet bulk-downloaded *(default suggestion)*
-   - In last batch
-   - In any batch
+- `src/lib/dataSync.ts` — rewrite `exportToXlsx` to use ExcelJS; keep the same signature `(headers, rows, fileName)` so `AdminDataSyncRun.tsx` and `AdminDataSyncWorkspace.tsx` keep working unchanged.
+- `package.json` — add `exceljs` dependency.
 
-4. **Pre-download confirmation**: when admin clicks "Download Selected as ZIP", if any selected rows already have a batch number, show a confirmation dialog:
-   > 8 of 25 selected IDs were already part of a previous bulk download (Batch #11, #12). Continue anyway?
-   With options: *Cancel* / *Skip already-downloaded* / *Download all anyway*.
+## Out of scope
+- Payroll export (the user noted payroll separately; not touching it here).
+- Backend / edge functions.
+- Any change to how data is fetched or matched.
 
-5. **Saved downloads list** (existing in-session) gets the batch number in its label, e.g. "Batch #12 — 47 IDs.zip".
-
-## Technical implementation
-
-### Database (migration)
-- New table `bulk_download_batches`:
-  - `batch_number` (int, auto-increment via sequence)
-  - `entry_count` (int)
-  - `created_by` (uuid, nullable)
-  - `created_at` (timestamptz)
-  - `label` (text, optional — e.g. ZIP filename)
-  - RLS: admins manage / read.
-- Add columns on `staff_entries`:
-  - `bulk_batch_number` (int, nullable, indexed)
-  - `bulk_downloaded_at` (timestamptz, nullable)
-- Update `protect_staff_entry_columns` trigger to allow these two new fields to be updated by the public role (same pattern as `download_count` / `downloaded_at`) so the existing "Public can update download tracking only" policy keeps working from the admin client.
-
-### Frontend (`src/pages/AdminEntries.tsx`)
-- Extend `StaffEntry` type with `bulk_batch_number` and `bulk_downloaded_at`.
-- In the bulk download flow (around line ~533–567), after the ZIP succeeds:
-  1. Insert a row into `bulk_download_batches` and read back `batch_number`.
-  2. Update all successfully-zipped `staff_entries` with `bulk_batch_number` + `bulk_downloaded_at`.
-- Fetch the latest batch on mount for the banner.
-- Add the new column, filter, badge styling, and confirm dialog.
-- Memoize the "last batch number" so the row highlight is cheap.
-
-### Out of scope
-- Single-user (front-end) downloads stay unchanged — only bulk admin ZIPs create batches.
-- No changes to staff-side download locking logic.
-
-## Result
-Admin can tell at a glance which IDs are "fresh" (never bulk-downloaded) vs. already shipped in batch #N, filter to just the new ones, and gets a safety prompt before re-downloading anything previously batched.
+## Acceptance
+- Downloading the updated master from a Data Sync run yields an `.xlsx` that opens with: navy header bar, frozen + filterable header row, auto-sized columns, right-aligned numbers, formatted dates, zebra striping, and no clipped content.

@@ -463,10 +463,17 @@ const AdminBankVerification = () => {
           Bank Account Verification
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Upload an Excel sheet of staff bank accounts to verify with Paystack.
+          Verify staff bank accounts with Paystack — match names in bulk, or auto-detect the bank from just an account number.
         </p>
       </div>
 
+      <Tabs defaultValue="match" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="match">Match Names (Bulk)</TabsTrigger>
+          <TabsTrigger value="detect">Auto-detect Bank</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="match" className="space-y-6">
       <Card className="p-5 space-y-3">
         <Label className="text-xs font-semibold">Upload Excel (.xlsx)</Label>
         <p className="text-xs text-muted-foreground">

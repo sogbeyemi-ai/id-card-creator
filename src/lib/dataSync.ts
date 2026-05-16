@@ -141,6 +141,8 @@ export async function exportToXlsx(headers: string[], rows: Record<string, any>[
         cell.numFmt = "#,##0.##";
       } else if (type === "date" && cell.value instanceof Date) {
         cell.numFmt = "yyyy-mm-dd";
+      } else if (type === "text") {
+        cell.numFmt = "@";
       }
     });
   }

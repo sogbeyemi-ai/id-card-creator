@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
     }
 
     // Try banks in concurrent batches; abort on first success
-    const CONCURRENCY = 5;
+    const CONCURRENCY = 12;
     let found:
       | { bank_name: string; bank_code: string; account_name: string }
       | null = null;

@@ -163,37 +163,54 @@ const AdminBankVerification = () => {
     setDetecting(true);
     setDetectResults([]);
     setDetectProgress({ done: 0, total: list.length });
-    const results: DetectResult[] = [];
-    try {
-      for (let i = 0; i < list.length; i++) {
-        const acct = list[i];
-        try {
-          const { data, error } = await supabase.functions.invoke("bank-detect", {
-            body: { accountNumber: acct },
-          });
-          if (error) {
-            results.push({ account_number: acct, status: "failed", error: error.message });
-          } else if (data?.status === "ok") {
-            results.push({
-              account_number: acct,
-              status: "ok",
-              bank_name: data.bank_name,
-              bank_code: data.bank_code,
-              account_name: data.account_name,
-            });
-          } else {
-            results.push({
-              account_number: acct,
-              status: "not_found",
-              error: data?.message || "No match",
-            });
-          }
-        } catch (e: any) {
-          results.push({ account_number: acct, status: "failed", error: e.message });
+
+    const PARALLEL = 6; // accounts looked up concurrently
+    const results: DetectResult[] = new Array(list.length);
+    let done = 0;
+
+    const lookup = async (acct: string, idx: number) => {
+      try {
+        const { data, error } = await supabase.functions.invoke("bank-detect", {
+          body: { accountNumber: acct },
+        });
+        if (error) {
+          results[idx] = { account_number: acct, status: "failed", error: error.message };
+        } else if (data?.status === "ok") {
+          results[idx] = {
+            account_number: acct,
+            status: "ok",
+            bank_name: data.bank_name,
+            bank_code: data.bank_code,
+            account_name: data.account_name,
+          };
+        } else {
+          results[idx] = {
+            account_number: acct,
+            status: "not_found",
+            error: data?.message || "No match",
+          };
         }
-        setDetectProgress({ done: i + 1, total: list.length });
-        setDetectResults([...results]);
+      } catch (e: any) {
+        results[idx] = { account_number: acct, status: "failed", error: e.message };
+      } finally {
+        done++;
+        setDetectProgress({ done, total: list.length });
+        setDetectResults(results.filter(Boolean) as DetectResult[]);
       }
+    };
+
+    try {
+      // Worker-pool: each worker pulls the next index
+      let next = 0;
+      const workers = Array.from({ length: Math.min(PARALLEL, list.length) }, async () => {
+        while (true) {
+          const idx = next++;
+          if (idx >= list.length) return;
+          await lookup(list[idx], idx);
+        }
+      });
+      await Promise.all(workers);
+      setDetectResults(results as DetectResult[]);
       toast.success("Detection complete");
     } finally {
       setDetecting(false);

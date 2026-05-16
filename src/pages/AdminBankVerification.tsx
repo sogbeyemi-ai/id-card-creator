@@ -108,6 +108,138 @@ const AdminBankVerification = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Auto-detect mode state
+  const [detectInput, setDetectInput] = useState("");
+  const [detecting, setDetecting] = useState(false);
+  const [detectProgress, setDetectProgress] = useState({ done: 0, total: 0 });
+  const [detectResults, setDetectResults] = useState<DetectResult[]>([]);
+  const detectFileRef = useRef<HTMLInputElement>(null);
+
+  const parseDetectInput = (raw: string): string[] => {
+    return Array.from(
+      new Set(
+        raw
+          .split(/[\s,;]+/)
+          .map((s) => s.replace(/\D/g, ""))
+          .filter((s) => s.length >= 10),
+      ),
+    );
+  };
+
+  const handleDetectExcel = async (file: File) => {
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" });
+      if (data.length < 1) throw new Error("Sheet is empty");
+      const headers = (data[0] as any[]).map((h) => String(h));
+      let iAcct = findCol(headers, ["account number", "account no", "acct no", "account"]);
+      let rowsToScan = data.slice(1);
+      // If no header detected, treat whole sheet as account numbers (col 0)
+      if (iAcct < 0) {
+        iAcct = 0;
+        rowsToScan = data;
+      }
+      const accts = rowsToScan
+        .map((r: any) => String(r[iAcct] ?? "").replace(/\D/g, ""))
+        .filter((s) => s.length >= 10);
+      if (!accts.length) throw new Error("No account numbers found");
+      setDetectInput(Array.from(new Set(accts)).join("\n"));
+      toast.success(`Loaded ${accts.length} account numbers`);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to read sheet");
+    } finally {
+      if (detectFileRef.current) detectFileRef.current.value = "";
+    }
+  };
+
+  const runDetect = async () => {
+    const list = parseDetectInput(detectInput);
+    if (!list.length) {
+      toast.error("Enter at least one valid account number");
+      return;
+    }
+    setDetecting(true);
+    setDetectResults([]);
+    setDetectProgress({ done: 0, total: list.length });
+    const results: DetectResult[] = [];
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const acct = list[i];
+        try {
+          const { data, error } = await supabase.functions.invoke("bank-detect", {
+            body: { accountNumber: acct },
+          });
+          if (error) {
+            results.push({ account_number: acct, status: "failed", error: error.message });
+          } else if (data?.status === "ok") {
+            results.push({
+              account_number: acct,
+              status: "ok",
+              bank_name: data.bank_name,
+              bank_code: data.bank_code,
+              account_name: data.account_name,
+            });
+          } else {
+            results.push({
+              account_number: acct,
+              status: "not_found",
+              error: data?.message || "No match",
+            });
+          }
+        } catch (e: any) {
+          results.push({ account_number: acct, status: "failed", error: e.message });
+        }
+        setDetectProgress({ done: i + 1, total: list.length });
+        setDetectResults([...results]);
+      }
+      toast.success("Detection complete");
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  const exportDetectResults = async () => {
+    if (!detectResults.length) {
+      toast.error("Nothing to export");
+      return;
+    }
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Auto Detect");
+    ws.columns = [
+      { header: "Account Number", key: "account_number", width: 20 },
+      { header: "Bank Name", key: "bank_name", width: 28 },
+      { header: "Account Name", key: "account_name", width: 32 },
+      { header: "Status", key: "status", width: 14 },
+      { header: "Note", key: "error", width: 30 },
+    ];
+    const header = ws.getRow(1);
+    header.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F2A47" } };
+    detectResults.forEach((r) =>
+      ws.addRow({
+        account_number: String(r.account_number),
+        bank_name: r.bank_name || "",
+        account_name: r.account_name || "",
+        status: r.status,
+        error: r.error || "",
+      }),
+    );
+    ws.getColumn("account_number").numFmt = "@";
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bank_autodetect_${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   useEffect(() => {
     supabase.functions.invoke("bank-list").then(({ data, error }) => {
       if (error) {

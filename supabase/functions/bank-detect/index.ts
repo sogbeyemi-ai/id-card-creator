@@ -18,13 +18,14 @@ async function tryResolve(key: string, account: string, code: string) {
       { headers: { Authorization: `Bearer ${key}` } },
     );
     if (r.status === 429) return { rateLimited: true };
+    if (r.status === 401) return { authError: true };
     const j = await r.json();
     if (j?.status && j?.data?.account_name) {
       return { ok: true, account_name: j.data.account_name as string };
     }
-    return { ok: false };
-  } catch {
-    return { ok: false };
+    return { ok: false, msg: j?.message as string | undefined };
+  } catch (e) {
+    return { ok: false, msg: (e as Error).message };
   }
 }
 

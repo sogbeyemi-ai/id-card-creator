@@ -92,16 +92,25 @@ Deno.serve(async (req) => {
     let found:
       | { bank_name: string; bank_code: string; account_name: string }
       | null = null;
+    let authError = false;
+    let lastMsg: string | undefined;
+    let attempted = 0;
 
-    for (let i = 0; i < banks.length && !found; i += CONCURRENCY) {
+    for (let i = 0; i < banks.length && !found && !authError; i += CONCURRENCY) {
       const slice = banks.slice(i, i + CONCURRENCY);
       const results = await Promise.all(
         slice.map((b) => tryResolve(key, accountNumber, b.code).then((r) => ({ r, b }))),
       );
+      attempted += slice.length;
+      if (results.some((x) => (x.r as any).authError)) {
+        authError = true;
+        break;
+      }
       // Handle rate limits with a short backoff
       if (results.some((x) => (x.r as any).rateLimited)) {
         await new Promise((res) => setTimeout(res, 1500));
-        i -= CONCURRENCY; // retry this slice
+        i -= CONCURRENCY;
+        attempted -= slice.length;
         continue;
       }
       const hit = results.find((x) => (x.r as any).ok);
@@ -111,14 +120,31 @@ Deno.serve(async (req) => {
           bank_code: hit.b.code,
           account_name: (hit.r as any).account_name,
         };
+      } else {
+        const m = results.find((x) => (x.r as any).msg);
+        if (m) lastMsg = (m.r as any).msg;
       }
-      // Gentle pacing between batches
       await new Promise((res) => setTimeout(res, 120));
     }
 
+    if (authError) {
+      return new Response(
+        JSON.stringify({
+          status: "failed",
+          message:
+            "Paystack rejected the API key (401). Check that PAYSTACK_SECRET_KEY is valid and matches the account's environment (test vs live).",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const isTestKey = key.startsWith("sk_test_");
     if (!found) {
       return new Response(
-        JSON.stringify({ status: "not_found", message: "No bank matched this account number" }),
+        JSON.stringify({
+          status: "not_found",
+          message: `No bank matched this account number${isTestKey ? " (using a TEST Paystack key — real accounts will not resolve; switch to a LIVE sk_live_... key)" : ""}. Last Paystack response: ${lastMsg || "n/a"}. Banks tried: ${attempted}.`,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

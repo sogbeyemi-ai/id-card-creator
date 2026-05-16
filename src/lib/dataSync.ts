@@ -18,11 +18,20 @@ export async function parseFileLocal(file: File): Promise<ParsedSheet> {
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/;
 
+// Detect long-digit identifiers (phone, account, BVN, NIN) that must stay as text
+function isLongDigitId(v: any): boolean {
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim().replace(/[\s\-]/g, "");
+  // pure digits (optionally leading +) with 11+ digits → identifier, not a real number
+  return /^\+?\d{11,}$/.test(s);
+}
+
 function detectType(values: any[]): "number" | "date" | "text" {
-  let nums = 0, dates = 0, nonEmpty = 0;
+  let nums = 0, dates = 0, longIds = 0, nonEmpty = 0;
   for (const v of values) {
     if (v === null || v === undefined || v === "") continue;
     nonEmpty++;
+    if (isLongDigitId(v)) { longIds++; continue; }
     if (v instanceof Date) { dates++; continue; }
     if (typeof v === "number" && Number.isFinite(v)) { nums++; continue; }
     if (typeof v === "string") {
@@ -33,6 +42,7 @@ function detectType(values: any[]): "number" | "date" | "text" {
     }
   }
   if (nonEmpty === 0) return "text";
+  if (longIds / nonEmpty >= 0.3) return "text"; // preserve identifiers as text
   if (dates / nonEmpty >= 0.7) return "date";
   if (nums / nonEmpty >= 0.7) return "number";
   return "text";
@@ -41,6 +51,7 @@ function detectType(values: any[]): "number" | "date" | "text" {
 function coerce(value: any, type: "number" | "date" | "text"): any {
   if (value === null || value === undefined || value === "") return null;
   if (type === "number") {
+    if (isLongDigitId(value)) return String(value); // keep identifier as text
     if (typeof value === "number") return value;
     const n = Number(String(value).replace(/,/g, ""));
     return Number.isFinite(n) ? n : value;
@@ -49,6 +60,13 @@ function coerce(value: any, type: "number" | "date" | "text"): any {
     if (value instanceof Date) return value;
     const d = new Date(value);
     return isNaN(d.getTime()) ? value : d;
+  }
+  // text: if it looks like scientific notation of an integer, expand it
+  if (typeof value === "number") return String(value).includes("e") ? value.toFixed(0) : String(value);
+  const s = String(value);
+  if (/^-?\d+(\.\d+)?e[+-]?\d+$/i.test(s.trim())) {
+    const n = Number(s);
+    if (Number.isFinite(n)) return n.toFixed(0);
   }
   return value;
 }

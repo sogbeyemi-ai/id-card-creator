@@ -14,6 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
+      bank_verification_batches: {
+        Row: {
+          created_at: string
+          failed_count: number
+          file_name: string
+          id: string
+          mismatch_count: number
+          total_rows: number
+          updated_at: string
+          uploaded_by: string | null
+          verified_count: number
+        }
+        Insert: {
+          created_at?: string
+          failed_count?: number
+          file_name: string
+          id?: string
+          mismatch_count?: number
+          total_rows?: number
+          updated_at?: string
+          uploaded_by?: string | null
+          verified_count?: number
+        }
+        Update: {
+          created_at?: string
+          failed_count?: number
+          file_name?: string
+          id?: string
+          mismatch_count?: number
+          total_rows?: number
+          updated_at?: string
+          uploaded_by?: string | null
+          verified_count?: number
+        }
+        Relationships: []
+      }
+      bank_verification_rows: {
+        Row: {
+          account_number: string
+          bank_code: string | null
+          bank_name: string | null
+          batch_id: string
+          created_at: string
+          error_message: string | null
+          expected_account_name: string | null
+          full_name: string
+          id: string
+          resolved_account_name: string | null
+          similarity: number | null
+          status: string
+          verified_at: string | null
+        }
+        Insert: {
+          account_number: string
+          bank_code?: string | null
+          bank_name?: string | null
+          batch_id: string
+          created_at?: string
+          error_message?: string | null
+          expected_account_name?: string | null
+          full_name: string
+          id?: string
+          resolved_account_name?: string | null
+          similarity?: number | null
+          status?: string
+          verified_at?: string | null
+        }
+        Update: {
+          account_number?: string
+          bank_code?: string | null
+          bank_name?: string | null
+          batch_id?: string
+          created_at?: string
+          error_message?: string | null
+          expected_account_name?: string | null
+          full_name?: string
+          id?: string
+          resolved_account_name?: string | null
+          similarity?: number | null
+          status?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_verification_rows_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "bank_verification_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bulk_download_batches: {
         Row: {
           batch_number: number

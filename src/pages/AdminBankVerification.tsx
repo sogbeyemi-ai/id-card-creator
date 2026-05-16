@@ -191,7 +191,9 @@ const AdminBankVerification = () => {
       // Insert rows in chunks of 500
       for (let i = 0; i < parsed.length; i += 500) {
         const chunk = parsed.slice(i, i + 500).map((p) => ({ ...p, batch_id: batch.id }));
-        const { error } = await supabase.from("bank_verification_rows").insert(chunk);
+        const { error } = await supabase
+          .from("bank_verification_rows")
+          .upsert(chunk, { onConflict: "batch_id,account_number,bank_code", ignoreDuplicates: true });
         if (error) throw error;
       }
 

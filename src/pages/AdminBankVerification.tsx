@@ -21,6 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Banknote,
   Upload,
@@ -30,8 +32,18 @@ import {
   FileSpreadsheet,
   Loader2,
   PlayCircle,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
+
+interface DetectResult {
+  account_number: string;
+  status: "ok" | "not_found" | "failed";
+  bank_name?: string;
+  bank_code?: string;
+  account_name?: string;
+  error?: string;
+}
 
 type Bank = { name: string; code: string; slug: string };
 

@@ -108,6 +108,12 @@ const findCol = (headers: string[], candidates: string[]) => {
   return -1;
 };
 
+const normalizeImportedAccount = (value: unknown) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length === 9) return digits.padStart(10, "0");
+  return digits;
+};
+
 const matchBank = (banks: Bank[], raw: string): Bank | null => {
   const n = norm(raw);
   if (!n || n === "0") return null;
@@ -186,7 +192,7 @@ const AdminBankVerification = () => {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" });
+      const data = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "", raw: false });
       if (data.length < 1) throw new Error("Sheet is empty");
       const headers = (data[0] as any[]).map((h) => String(h));
       let iAcct = findCol(headers, ["account number", "account no", "acct no", "account"]);
@@ -197,7 +203,7 @@ const AdminBankVerification = () => {
         rowsToScan = data;
       }
       const accts = rowsToScan
-        .map((r: any) => String(r[iAcct] ?? "").replace(/\D/g, ""))
+        .map((r: any) => normalizeImportedAccount(r[iAcct]))
         .filter((s) => s.length >= 10);
       if (!accts.length) throw new Error("No account numbers found");
       setDetectInput(Array.from(new Set(accts)).join("\n"));
@@ -355,7 +361,7 @@ const AdminBankVerification = () => {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" });
+      const data = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "", raw: false });
       if (data.length < 2) throw new Error("Sheet is empty");
       const headers = (data[0] as any[]).map((h) => String(h));
       const iName = findCol(headers, ["full name", "name", "staff name", "employee name"]);
@@ -368,7 +374,7 @@ const AdminBankVerification = () => {
 
       const parsed = (data.slice(1) as any[][])
         .map((r) => {
-          const acct = String(r[iAcct] ?? "").replace(/\D/g, "");
+          const acct = normalizeImportedAccount(r[iAcct]);
           const bankRaw = String(r[iBank] ?? "").trim();
           const matched = matchBank(banks, bankRaw);
           const validAccount = acct.length === 10;
@@ -429,7 +435,12 @@ const AdminBankVerification = () => {
 
   const runVerification = async () => {
     if (!activeBatch) return;
-    const pending = rows.filter((r) => r.status === "pending" && r.bank_code && r.account_number);
+    const pending = rows.filter(
+      (r) =>
+        r.status === "pending" &&
+        r.bank_code &&
+        String(r.account_number || "").replace(/\D/g, "").length === 10,
+    );
     if (!pending.length) {
       toast.info("Nothing pending to verify");
       return;

@@ -607,6 +607,110 @@ const AdminBankVerification = () => {
           </div>
         </Card>
       )}
+        </TabsContent>
+
+        <TabsContent value="detect" className="space-y-6">
+          <Card className="p-5 space-y-3">
+            <Label className="text-xs font-semibold flex items-center gap-2">
+              <Search className="w-3.5 h-3.5 text-accent" />
+              Detect Bank from Account Number
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Paste or type 10-digit account numbers (one per line, or separated by commas/spaces) — or upload an Excel sheet containing an <strong>Account Number</strong> column. The system will try each Nigerian bank via Paystack and return the bank name and account name.
+            </p>
+
+            <div className="flex items-center gap-2">
+              <Input
+                ref={detectFileRef}
+                type="file"
+                accept=".xlsx,.xls"
+                disabled={detecting}
+                onChange={(e) => e.target.files?.[0] && handleDetectExcel(e.target.files[0])}
+              />
+            </div>
+
+            <Textarea
+              placeholder={"0123456789\n1234567890\n..."}
+              rows={6}
+              value={detectInput}
+              onChange={(e) => setDetectInput(e.target.value)}
+              disabled={detecting}
+              className="font-mono text-sm"
+            />
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={runDetect}
+                disabled={detecting}
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                {detecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                {detecting ? `Detecting ${detectProgress.done}/${detectProgress.total}` : "Detect Banks"}
+              </Button>
+              {detectResults.length > 0 && (
+                <Button variant="outline" onClick={exportDetectResults} disabled={detecting}>
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />Export Results
+                </Button>
+              )}
+              <p className="text-xs text-muted-foreground self-center">
+                Each lookup tries up to ~50 banks; expect a few seconds per account.
+              </p>
+            </div>
+          </Card>
+
+          {detectResults.length > 0 && (
+            <Card className="p-0 overflow-hidden">
+              <div className="border-b p-4 flex items-center justify-between">
+                <h3 className="font-display font-semibold text-sm">Results ({detectResults.length})</h3>
+                <div className="flex gap-2 text-xs">
+                  <Badge className="bg-emerald-600 text-white">
+                    Found: {detectResults.filter((r) => r.status === "ok").length}
+                  </Badge>
+                  <Badge variant="destructive">
+                    Not found: {detectResults.filter((r) => r.status !== "ok").length}
+                  </Badge>
+                </div>
+              </div>
+              <div className="overflow-auto max-h-[60vh]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Account</TableHead>
+                      <TableHead>Bank</TableHead>
+                      <TableHead>Account Name</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detectResults.map((r, i) => (
+                      <TableRow key={`${r.account_number}-${i}`}>
+                        <TableCell className="font-mono text-xs">{r.account_number}</TableCell>
+                        <TableCell className="text-xs">{r.bank_name || "—"}</TableCell>
+                        <TableCell className="text-xs font-medium">
+                          {r.account_name || (
+                            <span className="text-muted-foreground italic">{r.error || "—"}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {r.status === "ok" ? (
+                            <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">
+                              <CheckCircle2 className="w-3 h-3 mr-1" />Found
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive">
+                              <XCircle className="w-3 h-3 mr-1" />Not Found
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

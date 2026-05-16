@@ -17,6 +17,7 @@ import AdminCycleDetail from "./pages/AdminCycleDetail.tsx";
 import AdminDataSync from "./pages/AdminDataSync.tsx";
 import AdminDataSyncWorkspace from "./pages/AdminDataSyncWorkspace.tsx";
 import AdminDataSyncRun from "./pages/AdminDataSyncRun.tsx";
+import AdminBankVerification from "./pages/AdminBankVerification.tsx";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="data-sync" element={<AdminDataSync />} />
             <Route path="data-sync/:workspaceId" element={<AdminDataSyncWorkspace />} />
             <Route path="data-sync/:workspaceId/run/:runId" element={<AdminDataSyncRun />} />
+            <Route path="bank-verification" element={<AdminBankVerification />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

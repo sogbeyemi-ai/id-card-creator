@@ -73,6 +73,27 @@ interface Batch {
 const norm = (s: string) =>
   (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
+const tokenize = (s: string) =>
+  (s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+const BANK_ALIASES: Record<string, string[]> = {
+  "033": ["uba", "uba bank", "u b a", "united bank of africa", "united bank for africa"],
+  "058": [
+    "gtb",
+    "gt bank",
+    "gtbank",
+    "g t b",
+    "guarantee trust bank",
+    "guaranty trust bank",
+  ],
+  "221": ["stanbic", "stanbic bank", "stanbic ibtc", "stanbic ibtc bank"],
+};
+
 const findCol = (headers: string[], candidates: string[]) => {
   const map = headers.map(norm);
   for (const c of candidates) {
@@ -87,13 +108,53 @@ const findCol = (headers: string[], candidates: string[]) => {
   return -1;
 };
 
+const normalizeImportedAccount = (value: unknown) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length === 9) return digits.padStart(10, "0");
+  return digits;
+};
+
 const matchBank = (banks: Bank[], raw: string): Bank | null => {
   const n = norm(raw);
-  if (!n) return null;
-  let b = banks.find((x) => norm(x.name) === n);
+  if (!n || n === "0") return null;
+
+  const aliasCode = Object.entries(BANK_ALIASES).find(([, aliases]) =>
+    aliases.some((alias) => norm(alias) === n),
+  )?.[0];
+  if (aliasCode) {
+    const aliasMatch = banks.find((x) => x.code === aliasCode);
+    if (aliasMatch) return aliasMatch;
+  }
+
+  let b = banks.find(
+    (x) => norm(x.name) === n || norm(x.slug) === n || norm(x.code) === n,
+  );
   if (b) return b;
-  b = banks.find((x) => norm(x.name).includes(n) || n.includes(norm(x.name)));
-  return b || null;
+
+  b = banks.find(
+    (x) =>
+      norm(x.name).includes(n) ||
+      n.includes(norm(x.name)) ||
+      norm(x.slug).includes(n) ||
+      n.includes(norm(x.slug)),
+  );
+  if (b) return b;
+
+  const inputTokens = new Set(tokenize(raw));
+  let best: { bank: Bank; score: number } | null = null;
+  for (const bank of banks) {
+    const tokens = new Set([...tokenize(bank.name), ...tokenize(bank.slug)]);
+    let overlap = 0;
+    inputTokens.forEach((token) => {
+      if (tokens.has(token)) overlap += 1;
+    });
+    const score = inputTokens.size ? overlap / inputTokens.size : 0;
+    if (score >= 0.66 && (!best || score > best.score)) {
+      best = { bank, score };
+    }
+  }
+
+  return best?.bank || null;
 };
 
 const AdminBankVerification = () => {
@@ -131,7 +192,7 @@ const AdminBankVerification = () => {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" });
+      const data = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "", raw: false });
       if (data.length < 1) throw new Error("Sheet is empty");
       const headers = (data[0] as any[]).map((h) => String(h));
       let iAcct = findCol(headers, ["account number", "account no", "acct no", "account"]);
@@ -142,7 +203,7 @@ const AdminBankVerification = () => {
         rowsToScan = data;
       }
       const accts = rowsToScan
-        .map((r: any) => String(r[iAcct] ?? "").replace(/\D/g, ""))
+        .map((r: any) => normalizeImportedAccount(r[iAcct]))
         .filter((s) => s.length >= 10);
       if (!accts.length) throw new Error("No account numbers found");
       setDetectInput(Array.from(new Set(accts)).join("\n"));
@@ -300,7 +361,7 @@ const AdminBankVerification = () => {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" });
+      const data = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "", raw: false });
       if (data.length < 2) throw new Error("Sheet is empty");
       const headers = (data[0] as any[]).map((h) => String(h));
       const iName = findCol(headers, ["full name", "name", "staff name", "employee name"]);
@@ -313,19 +374,22 @@ const AdminBankVerification = () => {
 
       const parsed = (data.slice(1) as any[][])
         .map((r) => {
-          const acct = String(r[iAcct] ?? "").replace(/\D/g, "");
+          const acct = normalizeImportedAccount(r[iAcct]);
           const bankRaw = String(r[iBank] ?? "").trim();
           const matched = matchBank(banks, bankRaw);
+          const validAccount = acct.length === 10;
           return {
             full_name: String(r[iName] ?? "").trim(),
             account_number: acct,
             bank_name: matched?.name || bankRaw,
             bank_code: matched?.code || null,
             expected_account_name: iExp >= 0 ? String(r[iExp] ?? "").trim() || null : null,
-            status: matched && acct ? "pending" : "failed",
+            status: matched && validAccount ? "pending" : "failed",
             error_message:
               !acct
                 ? "Missing account number"
+                : !validAccount
+                  ? "Account number must be 10 digits"
                 : !matched
                   ? `Unknown bank: ${bankRaw}`
                   : null,
@@ -371,7 +435,12 @@ const AdminBankVerification = () => {
 
   const runVerification = async () => {
     if (!activeBatch) return;
-    const pending = rows.filter((r) => r.status === "pending" && r.bank_code && r.account_number);
+    const pending = rows.filter(
+      (r) =>
+        r.status === "pending" &&
+        r.bank_code &&
+        String(r.account_number || "").replace(/\D/g, "").length === 10,
+    );
     if (!pending.length) {
       toast.info("Nothing pending to verify");
       return;
@@ -379,13 +448,18 @@ const AdminBankVerification = () => {
     setVerifying(true);
     setProgress({ done: 0, total: pending.length });
     const CHUNK = 20;
+    let warningShown = false;
     try {
       for (let i = 0; i < pending.length; i += CHUNK) {
         const chunk = pending.slice(i, i + CHUNK);
-        const { error } = await supabase.functions.invoke("bank-verify", {
+        const { data, error } = await supabase.functions.invoke("bank-verify", {
           body: { batchId: activeBatch.id, rowIds: chunk.map((r) => r.id) },
         });
         if (error) throw error;
+        if (data?.warning && !warningShown) {
+          warningShown = true;
+          toast.error(data.warning);
+        }
         setProgress({ done: Math.min(i + CHUNK, pending.length), total: pending.length });
         await fetchRows(activeBatch.id);
       }

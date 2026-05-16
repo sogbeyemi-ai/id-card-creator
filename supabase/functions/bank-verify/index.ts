@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
     let verified = 0,
       mismatch = 0,
       failed = 0;
+    let warning: string | null = null;
 
     for (const row of rows) {
       if (row.status === "verified" || row.status === "mismatch") {
@@ -118,7 +119,8 @@ Deno.serve(async (req) => {
             `${PAYSTACK}/bank/resolve?account_number=${acct}&bank_code=${bank}`,
             { headers: { Authorization: `Bearer ${key}` } },
           );
-          result = await r.json();
+          const json = await r.json();
+          result = { ...json, http_status: r.status };
         } catch (e) {
           result = { status: false, message: (e as Error).message };
         }
@@ -146,11 +148,24 @@ Deno.serve(async (req) => {
           .eq("id", row.id);
       } else {
         failed++;
+        const message = result?.message || "Could not resolve account";
+        if (
+          !warning &&
+          (String(message).toLowerCase().includes("test mode daily limit") ||
+            result?.http_status === 401 ||
+            result?.http_status === 429)
+        ) {
+          warning = String(message).toLowerCase().includes("test mode daily limit")
+            ? "Bank verification is hitting Paystack test-mode limits. Switch PAYSTACK_SECRET_KEY to a live key to verify real accounts."
+            : result?.http_status === 401
+              ? "Bank verification could not authenticate with Paystack. Check the PAYSTACK_SECRET_KEY runtime secret."
+              : "Bank verification is being rate-limited by Paystack. Please retry in a moment or reduce batch size.";
+        }
         await supabase
           .from("bank_verification_rows")
           .update({
             status: "failed",
-            error_message: result?.message || "Could not resolve account",
+            error_message: message,
             verified_at: new Date().toISOString(),
           })
           .eq("id", row.id);
@@ -178,7 +193,7 @@ Deno.serve(async (req) => {
       .eq("id", batchId);
 
     return new Response(
-      JSON.stringify({ processed: rows.length, verified, mismatch, failed }),
+      JSON.stringify({ processed: rows.length, verified, mismatch, failed, warning }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {

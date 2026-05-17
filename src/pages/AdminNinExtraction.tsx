@@ -38,7 +38,10 @@ async function call(action: string, payload: Record<string, any> = {}) {
 }
 
 export default function AdminNinExtraction() {
+  const [mode, setMode] = useState<"url" | "upload">("url");
   const [sheetUrl, setSheetUrl] = useState("");
+  const [uploadedRows, setUploadedRows] = useState<string[][] | null>(null);
+  const [uploadedName, setUploadedName] = useState<string>("");
   const [headers, setHeaders] = useState<string[]>([]);
   const [imageColumn, setImageColumn] = useState("");
   const [nameColumn, setNameColumn] = useState<string>("");

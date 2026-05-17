@@ -213,6 +213,104 @@ export type Database = {
         }
         Relationships: []
       }
+      nin_extraction_batches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          extracted_count: number
+          failed_count: number
+          id: string
+          image_column: string
+          name_column: string | null
+          sheet_title: string | null
+          sheet_url: string
+          total_rows: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          extracted_count?: number
+          failed_count?: number
+          id?: string
+          image_column: string
+          name_column?: string | null
+          sheet_title?: string | null
+          sheet_url: string
+          total_rows?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          extracted_count?: number
+          failed_count?: number
+          id?: string
+          image_column?: string
+          name_column?: string | null
+          sheet_title?: string | null
+          sheet_url?: string
+          total_rows?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      nin_extraction_rows: {
+        Row: {
+          batch_id: string
+          created_at: string
+          error_message: string | null
+          extra: Json
+          full_name: string | null
+          id: string
+          image_url: string
+          nin: string | null
+          raw_text: string | null
+          resolved_image_url: string | null
+          row_index: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          error_message?: string | null
+          extra?: Json
+          full_name?: string | null
+          id?: string
+          image_url: string
+          nin?: string | null
+          raw_text?: string | null
+          resolved_image_url?: string | null
+          row_index: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          error_message?: string | null
+          extra?: Json
+          full_name?: string | null
+          id?: string
+          image_url?: string
+          nin?: string | null
+          raw_text?: string | null
+          resolved_image_url?: string | null
+          row_index?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nin_extraction_rows_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "nin_extraction_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payroll_clients: {
         Row: {
           created_at: string

@@ -65,13 +65,33 @@ export default function AdminNinExtraction() {
 
   useEffect(() => { if (batchId) loadRows(batchId); }, [batchId]);
 
+  const sourcePayload = () => mode === "upload"
+    ? { rows: uploadedRows, source_label: uploadedName }
+    : { sheet_url: sheetUrl.trim() };
+
+  const handleFile = async (file: File) => {
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: false, defval: "" }) as string[][];
+      const cleaned = data.filter(r => r.some(c => String(c ?? "").trim().length));
+      if (!cleaned.length) return toast.error("File is empty");
+      setUploadedRows(cleaned.map(r => r.map(c => String(c ?? ""))));
+      setUploadedName(file.name);
+      setHeaders(cleaned[0]);
+      const guess = cleaned[0].find(h => /image|photo|url|nin|link/i.test(h)) || cleaned[0][0];
+      setImageColumn(guess);
+      toast.success(`Loaded ${cleaned.length - 1} rows from ${file.name}`);
+    } catch (e: any) { toast.error(`Could not read file: ${e.message}`); }
+  };
+
   const preview = async () => {
     if (!sheetUrl.trim()) return toast.error("Paste a Google Sheets URL");
     setPreviewing(true);
     try {
       const r = await call("preview", { sheet_url: sheetUrl.trim() });
       setHeaders(r.headers);
-      // best-guess image column
       const guess = r.headers.find((h: string) => /image|photo|url|nin/i.test(h)) || r.headers[0];
       setImageColumn(guess);
       toast.success(`Found ${r.total} rows`);
@@ -81,9 +101,10 @@ export default function AdminNinExtraction() {
 
   const createBatch = async () => {
     if (!imageColumn) return toast.error("Pick an image column");
+    if (mode === "upload" && !uploadedRows) return toast.error("Upload a file first");
     setCreating(true);
     try {
-      const r = await call("create_batch", { sheet_url: sheetUrl.trim(), image_column: imageColumn, name_column: nameColumn || undefined });
+      const r = await call("create_batch", { ...sourcePayload(), image_column: imageColumn, name_column: nameColumn || undefined });
       setBatchId(r.batch_id);
       toast.success(`Batch created (${r.total} rows). Click Process to start.`);
     } catch (e: any) { toast.error(e.message); }

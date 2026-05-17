@@ -124,33 +124,40 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
+    // Helper: load rows from either a Google Sheets URL, a raw CSV text, or pre-parsed rows
+    async function loadRows(b: any): Promise<string[][]> {
+      if (Array.isArray(b.rows)) return b.rows as string[][];
+      if (typeof b.csv_text === "string" && b.csv_text.length) return parseCSV(b.csv_text);
+      if (typeof b.sheet_url === "string" && b.sheet_url) {
+        const id = extractSheetId(b.sheet_url);
+        const gid = extractGid(b.sheet_url);
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
+        const r = await fetch(csvUrl, { redirect: "follow" });
+        if (!r.ok) throw new Error(`Could not read sheet (${r.status}). Open the link in incognito to verify it's shared as 'Anyone with the link'. Or upload the file directly.`);
+        const text = await r.text();
+        if (text.trim().startsWith("<")) throw new Error("Sheet returned an HTML login page — sharing is not public. Upload the file directly instead.");
+        return parseCSV(text);
+      }
+      throw new Error("Provide sheet_url, csv_text, or rows");
+    }
+
     if (action === "preview") {
-      const id = extractSheetId(body.sheet_url);
-      const gid = extractGid(body.sheet_url);
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
-      const r = await fetch(csvUrl);
-      if (!r.ok) throw new Error("Could not read sheet — make sure it's shared as 'Anyone with the link'");
-      const rows = parseCSV(await r.text());
+      const rows = await loadRows(body);
       const headers = rows[0] || [];
       const sample = rows.slice(1, 4);
       return new Response(JSON.stringify({ headers, sample, total: Math.max(0, rows.length - 1) }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (action === "create_batch") {
-      const { sheet_url, image_column, name_column } = body;
-      const id = extractSheetId(sheet_url);
-      const gid = extractGid(sheet_url);
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
-      const r = await fetch(csvUrl);
-      if (!r.ok) throw new Error("Could not read sheet");
-      const allRows = parseCSV(await r.text());
+      const { sheet_url, image_column, name_column, source_label } = body;
+      const allRows = await loadRows(body);
       const headers = allRows[0] || [];
       const imgIdx = headers.indexOf(image_column);
       if (imgIdx < 0) throw new Error(`Column not found: ${image_column}`);
       const nameIdx = name_column ? headers.indexOf(name_column) : -1;
 
       const dataRows = allRows.slice(1).map((r, i) => ({
-        row_index: i + 2, // sheet row number
+        row_index: i + 2,
         image_url: (r[imgIdx] || "").trim(),
         full_name: nameIdx >= 0 ? (r[nameIdx] || "").trim() : null,
       })).filter(r => r.image_url);

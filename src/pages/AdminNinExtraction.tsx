@@ -176,20 +176,36 @@ export default function AdminNinExtraction() {
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><FileSpreadsheet className="w-4 h-4" /> Source sheet</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="space-y-1">
-            <Label>Public Google Sheets URL</Label>
-            <div className="flex gap-2">
+          <Tabs value={mode} onValueChange={(v) => { setMode(v as any); setHeaders([]); setImageColumn(""); setNameColumn(""); }}>
+            <TabsList>
+              <TabsTrigger value="url"><FileSpreadsheet className="w-4 h-4 mr-1" /> Google Sheets URL</TabsTrigger>
+              <TabsTrigger value="upload"><Upload className="w-4 h-4 mr-1" /> Upload file</TabsTrigger>
+            </TabsList>
+            <TabsContent value="url" className="space-y-1 pt-3">
+              <Label>Public Google Sheets URL</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="https://docs.google.com/spreadsheets/d/…/edit#gid=0"
+                  value={sheetUrl}
+                  onChange={(e) => setSheetUrl(e.target.value)}
+                />
+                <Button onClick={preview} disabled={previewing}>
+                  <Search className="w-4 h-4" /> {previewing ? "Reading…" : "Preview"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Sheet must be shared as “Anyone with the link”. If that fails, switch to Upload file.</p>
+            </TabsContent>
+            <TabsContent value="upload" className="space-y-1 pt-3">
+              <Label>Upload CSV or Excel file (.csv, .xlsx, .xls)</Label>
               <Input
-                placeholder="https://docs.google.com/spreadsheets/d/…/edit#gid=0"
-                value={sheetUrl}
-                onChange={(e) => setSheetUrl(e.target.value)}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
               />
-              <Button onClick={preview} disabled={previewing}>
-                <Search className="w-4 h-4" /> {previewing ? "Reading…" : "Preview"}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">Sheet must be shared as “Anyone with the link”. Drive image URLs must also be public.</p>
-          </div>
+              {uploadedName && <p className="text-xs text-muted-foreground">Loaded: <span className="font-mono">{uploadedName}</span> · {uploadedRows ? uploadedRows.length - 1 : 0} data rows</p>}
+              <p className="text-xs text-muted-foreground">Image URLs in the file must be publicly accessible (e.g. Google Drive “Anyone with the link”).</p>
+            </TabsContent>
+          </Tabs>
 
           {headers.length > 0 && (
             <div className="grid sm:grid-cols-2 gap-3">

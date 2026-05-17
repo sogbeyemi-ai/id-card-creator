@@ -163,8 +163,8 @@ Deno.serve(async (req) => {
       })).filter(r => r.image_url);
 
       const { data: batch, error: be } = await auth.sb.from("nin_extraction_batches").insert({
-        sheet_url,
-        sheet_title: `Sheet ${id.slice(0, 8)}`,
+        sheet_url: sheet_url || null,
+        sheet_title: source_label || (sheet_url ? `Sheet ${extractSheetId(sheet_url).slice(0, 8)}` : "Uploaded file"),
         image_column,
         name_column: name_column || null,
         total_rows: dataRows.length,

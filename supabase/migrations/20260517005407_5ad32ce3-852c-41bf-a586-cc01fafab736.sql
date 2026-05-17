@@ -1,0 +1,1 @@
+ALTER TABLE public.nin_extraction_batches ALTER COLUMN sheet_url DROP NOT NULL;

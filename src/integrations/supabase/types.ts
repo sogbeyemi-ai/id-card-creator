@@ -223,7 +223,7 @@ export type Database = {
           image_column: string
           name_column: string | null
           sheet_title: string | null
-          sheet_url: string
+          sheet_url: string | null
           total_rows: number
           updated_at: string
         }
@@ -236,7 +236,7 @@ export type Database = {
           image_column: string
           name_column?: string | null
           sheet_title?: string | null
-          sheet_url: string
+          sheet_url?: string | null
           total_rows?: number
           updated_at?: string
         }
@@ -249,7 +249,7 @@ export type Database = {
           image_column?: string
           name_column?: string | null
           sheet_title?: string | null
-          sheet_url?: string
+          sheet_url?: string | null
           total_rows?: number
           updated_at?: string
         }

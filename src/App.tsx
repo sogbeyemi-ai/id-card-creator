@@ -18,6 +18,7 @@ import AdminDataSync from "./pages/AdminDataSync.tsx";
 import AdminDataSyncWorkspace from "./pages/AdminDataSyncWorkspace.tsx";
 import AdminDataSyncRun from "./pages/AdminDataSyncRun.tsx";
 import AdminBankVerification from "./pages/AdminBankVerification.tsx";
+import AdminNinExtraction from "./pages/AdminNinExtraction.tsx";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="data-sync/:workspaceId" element={<AdminDataSyncWorkspace />} />
             <Route path="data-sync/:workspaceId/run/:runId" element={<AdminDataSyncRun />} />
             <Route path="bank-verification" element={<AdminBankVerification />} />
+            <Route path="nin-extraction" element={<AdminNinExtraction />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

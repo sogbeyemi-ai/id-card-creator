@@ -198,7 +198,6 @@ Deno.serve(async (req) => {
           error_message: nin ? null : "No 11-digit NIN detected in OCR text",
         };
         await auth.sb.from("nin_extraction_rows").update(update).eq("id", row_id);
-        if (nin) await auth.sb.rpc("increment_nin_batch", { _batch_id: row.batch_id, _field: "extracted" }).catch(() => {});
         return new Response(JSON.stringify({ ok: true, nin, status: update.status }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       } catch (e: any) {
         await auth.sb.from("nin_extraction_rows").update({

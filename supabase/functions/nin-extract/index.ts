@@ -178,11 +178,15 @@ Deno.serve(async (req) => {
       if (imgIdx < 0) throw new Error(`Column not found: ${image_column}`);
       const nameIdx = name_column ? headers.indexOf(name_column) : -1;
 
-      const dataRows = allRows.slice(1).map((r, i) => ({
+      const rawDataRows = allRows.slice(1).map((r, i) => ({
         row_index: i + 2,
         image_url: (r[imgIdx] || "").trim(),
         full_name: nameIdx >= 0 ? (r[nameIdx] || "").trim() : null,
       })).filter(r => r.image_url);
+
+      const { kept: dataRows, removed: duplicates_removed } = nameIdx >= 0
+        ? dedupeByName(rawDataRows)
+        : { kept: rawDataRows, removed: 0 };
 
       const { data: batch, error: be } = await auth.sb.from("nin_extraction_batches").insert({
         sheet_url: sheet_url || null,
@@ -193,6 +197,7 @@ Deno.serve(async (req) => {
         created_by: auth.user.id,
       }).select().single();
       if (be) throw be;
+
 
       // insert in chunks
       const chunk = 500;

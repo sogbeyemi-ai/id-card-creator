@@ -141,12 +141,34 @@ Deno.serve(async (req) => {
       throw new Error("Provide sheet_url, csv_text, or rows");
     }
 
+    // Dedupe by trimmed, case-insensitive name. Keep the LAST row with a non-empty image link.
+    // Rows with empty/missing names are kept as-is (not grouped).
+    function dedupeByName<T extends { full_name: string | null; image_url: string }>(rows: T[]): { kept: T[]; removed: number } {
+      const lastIdxByName = new Map<string, number>();
+      rows.forEach((r, i) => {
+        const key = (r.full_name || "").trim().toLowerCase();
+        if (!key) return;
+        if (!r.image_url) return;
+        lastIdxByName.set(key, i);
+      });
+      const kept: T[] = [];
+      let removed = 0;
+      rows.forEach((r, i) => {
+        const key = (r.full_name || "").trim().toLowerCase();
+        if (!key) { kept.push(r); return; }
+        if (lastIdxByName.get(key) === i) kept.push(r);
+        else removed++;
+      });
+      return { kept, removed };
+    }
+
     if (action === "preview") {
       const rows = await loadRows(body);
       const headers = rows[0] || [];
       const sample = rows.slice(1, 4);
       return new Response(JSON.stringify({ headers, sample, total: Math.max(0, rows.length - 1) }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
 
     if (action === "create_batch") {
       const { sheet_url, image_column, name_column, source_label } = body;

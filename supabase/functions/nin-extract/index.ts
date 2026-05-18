@@ -215,6 +215,31 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (action === "retry_failed") {
+      const { batch_id } = body;
+      const { error: ue } = await auth.sb.from("nin_extraction_rows")
+        .update({ status: "pending", error_message: null, nin: null, raw_text: null })
+        .eq("batch_id", batch_id)
+        .in("status", ["failed", "no_nin_found"]);
+      if (ue) throw ue;
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (action === "rename_batch") {
+      const { batch_id, title } = body;
+      const { error: ue } = await auth.sb.from("nin_extraction_batches")
+        .update({ sheet_title: title }).eq("id", batch_id);
+      if (ue) throw ue;
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (action === "delete_batch") {
+      const { batch_id } = body;
+      await auth.sb.from("nin_extraction_rows").delete().eq("batch_id", batch_id);
+      await auth.sb.from("nin_extraction_batches").delete().eq("id", batch_id);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     if (action === "recount") {
       const { batch_id } = body;
       const { data: rows } = await auth.sb.from("nin_extraction_rows").select("status").eq("batch_id", batch_id);

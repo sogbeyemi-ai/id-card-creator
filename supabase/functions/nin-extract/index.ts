@@ -141,12 +141,34 @@ Deno.serve(async (req) => {
       throw new Error("Provide sheet_url, csv_text, or rows");
     }
 
+    // Dedupe by trimmed, case-insensitive name. Keep the LAST row with a non-empty image link.
+    // Rows with empty/missing names are kept as-is (not grouped).
+    function dedupeByName<T extends { full_name: string | null; image_url: string }>(rows: T[]): { kept: T[]; removed: number } {
+      const lastIdxByName = new Map<string, number>();
+      rows.forEach((r, i) => {
+        const key = (r.full_name || "").trim().toLowerCase();
+        if (!key) return;
+        if (!r.image_url) return;
+        lastIdxByName.set(key, i);
+      });
+      const kept: T[] = [];
+      let removed = 0;
+      rows.forEach((r, i) => {
+        const key = (r.full_name || "").trim().toLowerCase();
+        if (!key) { kept.push(r); return; }
+        if (lastIdxByName.get(key) === i) kept.push(r);
+        else removed++;
+      });
+      return { kept, removed };
+    }
+
     if (action === "preview") {
       const rows = await loadRows(body);
       const headers = rows[0] || [];
       const sample = rows.slice(1, 4);
       return new Response(JSON.stringify({ headers, sample, total: Math.max(0, rows.length - 1) }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
 
     if (action === "create_batch") {
       const { sheet_url, image_column, name_column, source_label } = body;
@@ -156,11 +178,15 @@ Deno.serve(async (req) => {
       if (imgIdx < 0) throw new Error(`Column not found: ${image_column}`);
       const nameIdx = name_column ? headers.indexOf(name_column) : -1;
 
-      const dataRows = allRows.slice(1).map((r, i) => ({
+      const rawDataRows = allRows.slice(1).map((r, i) => ({
         row_index: i + 2,
         image_url: (r[imgIdx] || "").trim(),
         full_name: nameIdx >= 0 ? (r[nameIdx] || "").trim() : null,
       })).filter(r => r.image_url);
+
+      const { kept: dataRows, removed: duplicates_removed } = nameIdx >= 0
+        ? dedupeByName(rawDataRows)
+        : { kept: rawDataRows, removed: 0 };
 
       const { data: batch, error: be } = await auth.sb.from("nin_extraction_batches").insert({
         sheet_url: sheet_url || null,
@@ -171,6 +197,7 @@ Deno.serve(async (req) => {
         created_by: auth.user.id,
       }).select().single();
       if (be) throw be;
+
 
       // insert in chunks
       const chunk = 500;
@@ -185,7 +212,7 @@ Deno.serve(async (req) => {
         const { error: ie } = await auth.sb.from("nin_extraction_rows").insert(slice);
         if (ie) throw ie;
       }
-      return new Response(JSON.stringify({ batch_id: batch.id, total: dataRows.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ batch_id: batch.id, total: dataRows.length, duplicates_removed }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (action === "process_row") {

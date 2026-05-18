@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import { exportToXlsx } from "@/lib/dataSync";
+
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,10 +133,15 @@ export default function AdminNinExtraction() {
       const r = await call("create_batch", { ...sourcePayload(), image_column: imageColumn, name_column: nameColumn || undefined });
       setBatchId(r.batch_id);
       await loadSavedBatches();
-      toast.success(`Batch created (${r.total} rows). Click Process to start.`);
+      if (r.duplicates_removed > 0) {
+        toast.success(`Batch created (${r.total} rows). Removed ${r.duplicates_removed} duplicate name${r.duplicates_removed === 1 ? "" : "s"} — kept the most recent submission for each staff.`);
+      } else {
+        toast.success(`Batch created (${r.total} rows). Click Process to start.`);
+      }
     } catch (e: any) { toast.error(e.message); }
     finally { setCreating(false); }
   };
+
 
   const processBatch = async () => {
     if (!batchId) return;
@@ -196,7 +203,26 @@ export default function AdminNinExtraction() {
     } catch (e: any) { toast.error(e.message); }
   };
 
-  const downloadBatchCsv = async (batch: SavedBatch) => {
+  const statusLabel = (s: string) =>
+    s === "extracted" ? "Extracted"
+    : s === "no_nin_found" ? "No NIN found"
+    : s === "failed" ? "Failed"
+    : s === "pending" ? "Pending"
+    : s;
+
+  const buildExportRows = (list: any[]) => list.map(r => ({
+    "Row #": r.row_index,
+    "Full Name": r.full_name || "",
+    "NIN": r.nin || "",
+    "Status": statusLabel(r.status),
+    "Error / Reason": r.error_message || "",
+    "Image URL": r.image_url || "",
+  }));
+
+  const safeLabel = (s: string) => s.replace(/[^a-z0-9-_]+/gi, "_");
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+
+  const downloadBatchXlsx = async (batch: SavedBatch) => {
     const { data } = await supabase
       .from("nin_extraction_rows" as any)
       .select("row_index,full_name,image_url,nin,status,error_message")
@@ -204,32 +230,19 @@ export default function AdminNinExtraction() {
       .order("row_index");
     const list = (data as any[]) || [];
     if (!list.length) return toast.error("No rows to export");
-    const hdrs = ["row_index", "full_name", "image_url", "nin", "status", "error_message"];
-    const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const csv = [hdrs.join(","), ...list.map(r => hdrs.map(h => esc((r as any)[h])).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const safe = (batch.sheet_title || `batch-${batch.id.slice(0, 8)}`).replace(/[^a-z0-9-_]+/gi, "_");
-    a.download = `nin-${safe}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const exportRows = buildExportRows(list);
+    const label = safeLabel(batch.sheet_title || `batch-${batch.id.slice(0, 8)}`);
+    await exportToXlsx(Object.keys(exportRows[0]), exportRows, `nin-extraction-${label}-${todayStr()}.xlsx`);
   };
 
-  const exportCsv = () => {
+  const exportXlsx = async () => {
     if (!rows.length) return;
-    const hdrs = ["row_index", "full_name", "image_url", "nin", "status", "error_message"];
-    const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const csv = [hdrs.join(","), ...rows.map(r => hdrs.map(h => esc((r as any)[h])).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `nin-extraction-${batchId}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const exportRows = buildExportRows(rows);
+    const current = savedBatches.find(b => b.id === batchId);
+    const label = safeLabel(current?.sheet_title || `batch-${(batchId || "").slice(0, 8)}`);
+    await exportToXlsx(Object.keys(exportRows[0]), exportRows, `nin-extraction-${label}-${todayStr()}.xlsx`);
   };
+
 
   const filtered = filter
     ? rows.filter(r => JSON.stringify(r).toLowerCase().includes(filter.toLowerCase()))
@@ -304,7 +317,7 @@ export default function AdminNinExtraction() {
                               <Button size="sm" variant="outline" onClick={() => setBatchId(b.id)} title="Open">
                                 <FolderOpen className="w-3 h-3" />
                               </Button>
-                              <Button size="sm" variant="outline" onClick={() => downloadBatchCsv(b)} title="Download CSV">
+                              <Button size="sm" variant="outline" onClick={() => downloadBatchXlsx(b)} title="Download Excel">
                                 <Download className="w-3 h-3" />
                               </Button>
                               <Button size="sm" variant="outline" onClick={() => renameBatch(b.id, b.sheet_title)} title="Rename">
@@ -424,8 +437,8 @@ export default function AdminNinExtraction() {
                 </Button>
               )}
               {processing && <Button variant="outline" onClick={() => { stopRef.current = true; }}>Stop</Button>}
-              <Button variant="outline" onClick={exportCsv} disabled={!rows.length}>
-                <Download className="w-4 h-4" /> Export CSV
+              <Button variant="outline" onClick={exportXlsx} disabled={!rows.length}>
+                <Download className="w-4 h-4" /> Export Excel
               </Button>
               <Input placeholder="Search…" value={filter} onChange={(e) => setFilter(e.target.value)} className="max-w-xs ml-auto" />
             </div>

@@ -317,7 +317,7 @@ export default function AdminNinExtraction() {
                               <Button size="sm" variant="outline" onClick={() => setBatchId(b.id)} title="Open">
                                 <FolderOpen className="w-3 h-3" />
                               </Button>
-                              <Button size="sm" variant="outline" onClick={() => downloadBatchCsv(b)} title="Download CSV">
+                              <Button size="sm" variant="outline" onClick={() => downloadBatchXlsx(b)} title="Download Excel">
                                 <Download className="w-3 h-3" />
                               </Button>
                               <Button size="sm" variant="outline" onClick={() => renameBatch(b.id, b.sheet_title)} title="Rename">
@@ -437,8 +437,8 @@ export default function AdminNinExtraction() {
                 </Button>
               )}
               {processing && <Button variant="outline" onClick={() => { stopRef.current = true; }}>Stop</Button>}
-              <Button variant="outline" onClick={exportCsv} disabled={!rows.length}>
-                <Download className="w-4 h-4" /> Export CSV
+              <Button variant="outline" onClick={exportXlsx} disabled={!rows.length}>
+                <Download className="w-4 h-4" /> Export Excel
               </Button>
               <Input placeholder="Search…" value={filter} onChange={(e) => setFilter(e.target.value)} className="max-w-xs ml-auto" />
             </div>

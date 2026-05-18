@@ -212,7 +212,7 @@ Deno.serve(async (req) => {
         const { error: ie } = await auth.sb.from("nin_extraction_rows").insert(slice);
         if (ie) throw ie;
       }
-      return new Response(JSON.stringify({ batch_id: batch.id, total: dataRows.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ batch_id: batch.id, total: dataRows.length, duplicates_removed }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (action === "process_row") {

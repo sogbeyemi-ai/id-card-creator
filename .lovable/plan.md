@@ -1,33 +1,48 @@
 ## Goal
-Make NIN extractions persistent and revisitable, and explain why some rows fail.
+Two improvements to **NIN Extraction**:
+1. Download results as a **styled Excel file** (same look as Data Sync export), not plain CSV.
+2. **Deduplicate by staff name** on upload — keep only the last (most recent) row per name that has an image link.
 
-## 1. Saved extractions (history)
-Batches and rows are already stored in the database — we just don't show past ones. Add a **"Saved extractions"** section to `/admin/nin-extraction` that lists every prior batch.
+---
 
-For each batch row in the list:
-- Date, source label (sheet title / uploaded file name), totals: extracted / failed / pending
-- **Open** → loads that batch into the existing results table (reuses current UI: re-process pending, re-download CSV, search/filter)
-- **Download CSV** → one-click export without opening
-- **Rename** → editable label so users can find batches later (e.g. "May payroll NINs")
-- **Delete** → removes batch + its rows
+## 1. Styled Excel download
 
-Layout: collapsible "Saved extractions" card above the source-sheet card, sorted by newest first, with a search box for label/date.
+Replace the current CSV download on `/admin/nin-extraction` with a polished `.xlsx` export that matches the Data Sync look:
 
-## 2. Failure reasons (why some didn't extract)
-The edge function already writes a reason to `error_message` and uses two statuses (`failed` vs `no_nin_found`), but the UI lumps them together as "Failed". Improve this:
+- Frozen header row, navy header background, white bold text
+- Auto-filter on all columns, zebra striping
+- NIN column forced to **text format** so the 11 digits never display as scientific notation
+- Auto-sized columns
+- Filename: `nin-extraction-{label}-{YYYY-MM-DD}.xlsx`
 
-- Split the stats badge into **Failed** (image couldn't be fetched / OCR errored) and **No NIN found** (image was read but no 11-digit number was present — usually means the uploaded image was not an actual NIN slip, was blurry, or was a different ID type).
-- Add a **"Why did this fail?"** helper panel at the top of results explaining the common causes in plain English:
-  - *No NIN found* → wrong document uploaded (e.g. driver's licence, voter's card, passport photo), low-quality / blurry scan, NIN digits cut off, or handwritten.
-  - *Failed* → image URL is private (Google Drive not shared publicly), link broken (404), file is not an image, or OCR service was rate-limited.
-- Make each row's error message more specific where possible (already partially done; tweak messages in the edge function for the most common cases).
-- Add a **"Retry failed"** button that re-queues only failed + no-NIN rows (useful after fixing sharing permissions).
+**Columns**: `Row #`, `Full Name`, `NIN`, `Status` (Extracted / No NIN found / Failed / Pending), `Error / Reason`, `Image URL`.
+
+Applies to both the **active batch** download and the **history "Download"** action.
+
+CSV fallback removed (XLSX is the only export). Reuses the existing `exportToXlsx` helper in `src/lib/dataSync.ts` — no new dependency.
+
+---
+
+## 2. Dedupe by staff name (keep last row with a link)
+
+When a sheet is uploaded / pulled from Google Sheets and the user clicks **"Start extraction"**, before creating rows in the database:
+
+- Group rows by **trimmed, case-insensitive full name**
+- For each name, keep only the **last row** (bottom-most in the sheet) that has a non-empty image link
+- Rows with no name column selected, or with empty names, are kept as-is (no grouping)
+- Show a small notice: *"Removed N duplicate name(s). Kept the most recent submission for each staff."*
+
+**Where this happens**: in the edge function `nin-extract` inside the `create_batch` action, right after parsing `dataRows` and before inserting into `nin_extraction_rows`. This keeps the logic server-side so any future ingest path benefits too. The function returns `{ batch_id, total, duplicates_removed }` so the UI can show the notice.
+
+**Preview action** also reports a `duplicates` count so users see the impact before committing.
+
+---
 
 ## Technical notes
-- Frontend only for the history list: query `nin_extraction_batches` directly (RLS already restricts to approved admins) and join counts.
-- Add a small `DELETE` and `UPDATE` (for label) flow via supabase client — no schema change needed; `sheet_title` already serves as the label field.
-- Extend the edge function with a `retry_failed` action that resets matching rows to `pending`, then reuse existing `process_row` loop.
-- No new tables, no new secrets.
+- Frontend: `src/pages/AdminNinExtraction.tsx` — swap `download CSV` handlers for an `exportToXlsx` call; surface the new `duplicates_removed` toast.
+- Backend: `supabase/functions/nin-extract/index.ts` — add a `dedupeByName(rows, nameIdx, imgIdx)` helper, apply in `create_batch` and report counts in `preview`.
+- No schema changes, no new secrets.
 
 ## Out of scope
-- Storing the actual ID images in our own storage (currently we only keep the URL + OCR text). Can be added later if you want offline re-OCR.
+- Fuzzy name matching (you chose exact, case-insensitive).
+- Dedup on already-saved historical batches (only applies to new uploads).

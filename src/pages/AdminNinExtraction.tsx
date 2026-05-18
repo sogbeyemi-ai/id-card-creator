@@ -133,10 +133,15 @@ export default function AdminNinExtraction() {
       const r = await call("create_batch", { ...sourcePayload(), image_column: imageColumn, name_column: nameColumn || undefined });
       setBatchId(r.batch_id);
       await loadSavedBatches();
-      toast.success(`Batch created (${r.total} rows). Click Process to start.`);
+      if (r.duplicates_removed > 0) {
+        toast.success(`Batch created (${r.total} rows). Removed ${r.duplicates_removed} duplicate name${r.duplicates_removed === 1 ? "" : "s"} — kept the most recent submission for each staff.`);
+      } else {
+        toast.success(`Batch created (${r.total} rows). Click Process to start.`);
+      }
     } catch (e: any) { toast.error(e.message); }
     finally { setCreating(false); }
   };
+
 
   const processBatch = async () => {
     if (!batchId) return;

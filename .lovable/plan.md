@@ -1,38 +1,33 @@
 ## Goal
-Make the Data Sync "Download updated master" (and workspace master export) produce a polished, well-structured Excel file instead of a plain dump.
+Make NIN extractions persistent and revisitable, and explain why some rows fail.
 
-## Approach
-Replace the current `xlsx` based `exportToXlsx` in `src/lib/dataSync.ts` with an **ExcelJS**-powered version. `xlsx` (SheetJS CE) has no real styling support; `exceljs` gives us colored headers, borders, alignment, frozen panes, auto-filter, and proper column widths — all client-side, no backend changes.
+## 1. Saved extractions (history)
+Batches and rows are already stored in the database — we just don't show past ones. Add a **"Saved extractions"** section to `/admin/nin-extraction` that lists every prior batch.
 
-## What the new export will include
+For each batch row in the list:
+- Date, source label (sheet title / uploaded file name), totals: extracted / failed / pending
+- **Open** → loads that batch into the existing results table (reuses current UI: re-process pending, re-download CSV, search/filter)
+- **Download CSV** → one-click export without opening
+- **Rename** → editable label so users can find batches later (e.g. "May payroll NINs")
+- **Delete** → removes batch + its rows
 
-1. **Branded header row**
-   - Bold white text on a deep navy fill (matches the app's corporate theme).
-   - Centered, taller row height, thin border.
-2. **Auto-sized columns**
-   - Width based on the longest value in each column (capped, e.g. min 12 / max 50) so nothing is clipped and nothing is absurdly wide.
-3. **Alignment & formatting**
-   - Text columns: left-aligned, vertical middle, wrap text on.
-   - Numeric columns (auto-detected): right-aligned with `#,##0.##` format.
-   - Date-like values (ISO strings / Date objects): formatted as `yyyy-mm-dd`.
-4. **Readability**
-   - Frozen header row (`views: [{ state: 'frozen', ySplit: 1 }]`).
-   - Auto-filter across the header range.
-   - Subtle zebra striping on alternate body rows.
-   - Thin light-gray borders on all used cells.
-5. **Sheet metadata**
-   - Sheet renamed to `Master` with a sensible workbook title/creator (`PROTEN ID Generator`).
-   - File still saved via a Blob + `URL.createObjectURL` download (no behavior change for the caller).
+Layout: collapsible "Saved extractions" card above the source-sheet card, sorted by newest first, with a search box for label/date.
 
-## Files to change
+## 2. Failure reasons (why some didn't extract)
+The edge function already writes a reason to `error_message` and uses two statuses (`failed` vs `no_nin_found`), but the UI lumps them together as "Failed". Improve this:
 
-- `src/lib/dataSync.ts` — rewrite `exportToXlsx` to use ExcelJS; keep the same signature `(headers, rows, fileName)` so `AdminDataSyncRun.tsx` and `AdminDataSyncWorkspace.tsx` keep working unchanged.
-- `package.json` — add `exceljs` dependency.
+- Split the stats badge into **Failed** (image couldn't be fetched / OCR errored) and **No NIN found** (image was read but no 11-digit number was present — usually means the uploaded image was not an actual NIN slip, was blurry, or was a different ID type).
+- Add a **"Why did this fail?"** helper panel at the top of results explaining the common causes in plain English:
+  - *No NIN found* → wrong document uploaded (e.g. driver's licence, voter's card, passport photo), low-quality / blurry scan, NIN digits cut off, or handwritten.
+  - *Failed* → image URL is private (Google Drive not shared publicly), link broken (404), file is not an image, or OCR service was rate-limited.
+- Make each row's error message more specific where possible (already partially done; tweak messages in the edge function for the most common cases).
+- Add a **"Retry failed"** button that re-queues only failed + no-NIN rows (useful after fixing sharing permissions).
+
+## Technical notes
+- Frontend only for the history list: query `nin_extraction_batches` directly (RLS already restricts to approved admins) and join counts.
+- Add a small `DELETE` and `UPDATE` (for label) flow via supabase client — no schema change needed; `sheet_title` already serves as the label field.
+- Extend the edge function with a `retry_failed` action that resets matching rows to `pending`, then reuse existing `process_row` loop.
+- No new tables, no new secrets.
 
 ## Out of scope
-- Payroll export (the user noted payroll separately; not touching it here).
-- Backend / edge functions.
-- Any change to how data is fetched or matched.
-
-## Acceptance
-- Downloading the updated master from a Data Sync run yields an `.xlsx` that opens with: navy header bar, frozen + filterable header row, auto-sized columns, right-aligned numbers, formatted dates, zebra striping, and no clipped content.
+- Storing the actual ID images in our own storage (currently we only keep the URL + OCR text). Can be added later if you want offline re-OCR.

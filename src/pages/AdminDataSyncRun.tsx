@@ -11,7 +11,12 @@ import { ArrowLeft, Check, X, Download } from "lucide-react";
 import { toast } from "sonner";
 import { confidenceBadge, exportToXlsx } from "@/lib/dataSync";
 
-async function fetchAllRows(table: string, select: string, filters: { column: string; value: string }[]) {
+async function fetchAllRows(
+  table: string,
+  select: string,
+  filters: { column: string; value: string }[],
+  orderBy?: { column: string; ascending?: boolean },
+) {
   const pageSize = 1000;
   const maxRows = 10000;
   const collected: any[] = [];
@@ -21,6 +26,7 @@ async function fetchAllRows(table: string, select: string, filters: { column: st
     const to = Math.min(from + pageSize - 1, maxRows - 1);
     let query = supabase.from(table as any).select(select).range(from, to);
     for (const filter of filters) query = query.eq(filter.column, filter.value);
+    if (orderBy) query = query.order(orderBy.column, { ascending: orderBy.ascending ?? true });
     const { data, error } = await query;
     if (error) throw error;
     const page = (data as any[]) || [];

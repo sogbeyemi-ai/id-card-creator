@@ -146,13 +146,27 @@ Deno.serve(async (req) => {
       itemTargetUpdates.push({ id: u.it.id, target: u.targetId });
     }
 
+    // Dedupe master updates by id — multiple source rows can map to the same master row,
+    // and Postgres ON CONFLICT cannot touch the same row twice in one statement.
+    // Merge sequentially so later writes win on overlapping fields.
+    const dedupedMap = new Map<string, any>();
+    for (const u of masterUpdates) {
+      const prev = dedupedMap.get(u.id);
+      if (prev) {
+        dedupedMap.set(u.id, { ...prev, ...u, data: { ...prev.data, ...u.data } });
+      } else {
+        dedupedMap.set(u.id, u);
+      }
+    }
+    const dedupedUpdates = Array.from(dedupedMap.values());
+
     // Bulk upsert master updates (one round-trip per chunk instead of per-row).
-    if (masterUpdates.length) {
+    if (dedupedUpdates.length) {
       const chunk = 500;
-      for (let i = 0; i < masterUpdates.length; i += chunk) {
+      for (let i = 0; i < dedupedUpdates.length; i += chunk) {
         const { error } = await supabase
           .from("sync_master_rows")
-          .upsert(masterUpdates.slice(i, i + chunk), { onConflict: "id" });
+          .upsert(dedupedUpdates.slice(i, i + chunk), { onConflict: "id" });
         if (error) throw error;
       }
     }

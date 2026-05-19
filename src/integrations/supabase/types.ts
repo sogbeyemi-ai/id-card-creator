@@ -746,6 +746,7 @@ export type Database = {
           data: Json
           id: string
           name_key: string | null
+          row_order: number | null
           updated_at: string
           workspace_id: string
         }
@@ -754,6 +755,7 @@ export type Database = {
           data?: Json
           id?: string
           name_key?: string | null
+          row_order?: number | null
           updated_at?: string
           workspace_id: string
         }
@@ -762,6 +764,7 @@ export type Database = {
           data?: Json
           id?: string
           name_key?: string | null
+          row_order?: number | null
           updated_at?: string
           workspace_id?: string
         }

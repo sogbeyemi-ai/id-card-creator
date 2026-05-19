@@ -80,6 +80,16 @@ Deno.serve(async (req) => {
     const nameAliases = ["full name", "name", "staff name", "employee name", "fullname"];
     const mstNameField = masterHeaders.find((h) => nameAliases.includes(norm(h))) ?? masterHeaders[0];
 
+    // Get current max row_order for this workspace so any "new" rows append to bottom.
+    const { data: maxRow } = await supabase
+      .from("sync_master_rows")
+      .select("row_order")
+      .eq("workspace_id", run.workspace_id)
+      .order("row_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let nextOrder = ((maxRow?.row_order as number) ?? 0) + 1;
+
     let applied = 0;
     for (const it of items) {
       const decision = item_decisions[it.id];
@@ -96,9 +106,10 @@ Deno.serve(async (req) => {
         const nm = mstNameField ? String(newData[mstNameField] ?? "") : "";
         const { data: inserted } = await supabase
           .from("sync_master_rows")
-          .insert({ workspace_id: run.workspace_id, data: newData, name_key: nameKey(nm) })
+          .insert({ workspace_id: run.workspace_id, data: newData, name_key: nameKey(nm), row_order: nextOrder })
           .select()
           .single();
+        nextOrder += 1;
         await supabase.from("sync_snapshots").insert({
           run_id, master_row_id: inserted?.id ?? null, before: {}, after: newData,
         });
@@ -116,12 +127,14 @@ Deno.serve(async (req) => {
       const after = { ...before };
       for (const [sh, mh] of Object.entries(headerMapping)) {
         if (!mh) continue;
+        // NEVER overwrite the master's staff-name column — master name is the source of truth.
+        if (mstNameField && mh === mstNameField) continue;
         const v = it.source_row[sh];
         if (v === null || v === undefined || String(v).trim() === "") continue;
         after[mh] = v;
       }
-      const nm = mstNameField ? String(after[mstNameField] ?? "") : "";
-      await supabase.from("sync_master_rows").update({ data: after, name_key: nameKey(nm) }).eq("id", targetId);
+      // Keep the original master name_key — name column is locked, so name_key stays put.
+      await supabase.from("sync_master_rows").update({ data: after }).eq("id", targetId);
       await supabase.from("sync_snapshots").insert({
         run_id, master_row_id: targetId, before, after,
       });

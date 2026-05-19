@@ -120,7 +120,7 @@ export default function AdminDataSyncRun() {
   };
 
   const downloadUpdatedMaster = async () => {
-      const mr = await fetchAllRows("sync_master_rows", "data", [{ column: "workspace_id", value: workspaceId! }]);
+      const mr = await fetchAllRows("sync_master_rows", "data", [{ column: "workspace_id", value: workspaceId! }], { column: "row_order" });
     const rows = (mr || []).map((r: any) => r.data);
     if (!rows.length) { toast.error("Master is empty"); return; }
     const stamp = new Date().toISOString().slice(0, 10);

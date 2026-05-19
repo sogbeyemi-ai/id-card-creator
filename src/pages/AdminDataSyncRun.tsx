@@ -80,7 +80,7 @@ export default function AdminDataSyncRun() {
         .select("headers").eq("workspace_id", workspaceId)
         .order("uploaded_at", { ascending: false }).limit(1).maybeSingle();
       setMasterHeaders(((sheet as any)?.headers as string[]) || []);
-      const mr = await fetchAllRows("sync_master_rows", "id, data", [{ column: "workspace_id", value: workspaceId! }]);
+      const mr = await fetchAllRows("sync_master_rows", "id, data", [{ column: "workspace_id", value: workspaceId! }], { column: "row_order" });
       setMasterRows(mr);
 
       // default decisions

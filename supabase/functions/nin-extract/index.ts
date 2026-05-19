@@ -284,11 +284,26 @@ Deno.serve(async (req) => {
       try {
         const resolved = resolveImageUrl(row.image_url);
         const dataUrl = await fetchImageAsDataUrl(resolved);
-        const text = await ocrWithGemini(dataUrl);
-        const nin = findNIN(text);
+
+        // Pass 1: fast model
+        let { nin, raw_text } = await runOcr(dataUrl, "google/gemini-2.5-flash");
+
+        // Pass 2: stronger model fallback if Flash missed it
+        if (!nin) {
+          try {
+            const second = await runOcr(dataUrl, "google/gemini-2.5-pro");
+            if (second.nin) {
+              nin = second.nin;
+              raw_text = second.raw_text || raw_text;
+            } else if (second.raw_text && second.raw_text.length > (raw_text?.length || 0)) {
+              raw_text = second.raw_text;
+            }
+          } catch (_) { /* keep Flash result */ }
+        }
+
         const update: any = {
           resolved_image_url: resolved,
-          raw_text: text.slice(0, 4000),
+          raw_text: (raw_text || "").slice(0, 4000),
           nin,
           status: nin ? "extracted" : "no_nin_found",
           error_message: nin ? null : "No 11-digit NIN detected in OCR text",

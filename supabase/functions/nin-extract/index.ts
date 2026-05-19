@@ -71,9 +71,42 @@ function resolveImageUrl(url: string): string {
 async function fetchImageAsDataUrl(url: string): Promise<string> {
   const resp = await fetch(url, { redirect: "follow" });
   if (!resp.ok) throw new Error(`Image fetch failed (${resp.status})`);
-  const ct = resp.headers.get("content-type") || "image/jpeg";
-  if (ct.includes("text/html")) throw new Error("Image URL is not public (Google login page returned)");
   const buf = new Uint8Array(await resp.arrayBuffer());
+  const headerType = (resp.headers.get("content-type") || "").toLowerCase();
+  if (headerType.includes("text/html")) throw new Error("Image URL is not public (Google login page returned)");
+
+  const sniffedType = (() => {
+    if (buf.length >= 4 && buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) return "application/pdf";
+    if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+    if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 && buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) return "image/png";
+    if (buf.length >= 6) {
+      const sig = String.fromCharCode(...buf.slice(0, 6));
+      if (sig === "GIF87a" || sig === "GIF89a") return "image/gif";
+    }
+    if (buf.length >= 12) {
+      const riff = String.fromCharCode(...buf.slice(0, 4));
+      const webp = String.fromCharCode(...buf.slice(8, 12));
+      if (riff === "RIFF" && webp === "WEBP") return "image/webp";
+    }
+
+    const disposition = resp.headers.get("content-disposition") || "";
+    const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    const filename = decodeURIComponent((filenameMatch?.[1] || filenameMatch?.[2] || url).toLowerCase());
+    if (filename.endsWith(".pdf")) return "application/pdf";
+    if (filename.endsWith(".png")) return "image/png";
+    if (filename.endsWith(".webp")) return "image/webp";
+    if (filename.endsWith(".gif")) return "image/gif";
+    if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) return "image/jpeg";
+
+    if (headerType && headerType !== "application/octet-stream") return headerType.split(";")[0];
+    return null;
+  })();
+
+  const ct = sniffedType || "image/jpeg";
+  if (!["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"].includes(ct)) {
+    throw new Error(`Unsupported file type for OCR: ${ct}. Use JPG, PNG, WEBP, GIF, or PDF.`);
+  }
+
   let bin = "";
   for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
   const b64 = btoa(bin);
@@ -81,7 +114,7 @@ async function fetchImageAsDataUrl(url: string): Promise<string> {
 }
 
 async function runOcr(dataUrl: string, model: string): Promise<{ nin: string | null; raw_text: string }> {
-  const prompt = `You are extracting the Nigerian National Identification Number (NIN) from this image. The image is one of:
+  const prompt = `You are extracting the Nigerian National Identification Number (NIN) from this document image or PDF. The source is one of:
 - A NIN slip (paper printout from NIMC)
 - A NIN card (plastic ID card)
 - A Nigerian international passport (the NIN is printed on the data page, often labelled "NIN" or in the machine-readable zone)

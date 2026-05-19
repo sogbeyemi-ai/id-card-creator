@@ -427,6 +427,8 @@ Deno.serve(async (req) => {
         for (const sh of source_headers) {
           const mh = headerMapping[sh];
           if (!mh) continue;
+          // Master's name column is locked — don't propose name overwrites.
+          if (mstNameField && mh === mstNameField) continue;
           const newVal = srow[sh];
           if (newVal === null || newVal === undefined || String(newVal).trim() === "") continue;
           const oldVal = (best.row.data as any)[mh];

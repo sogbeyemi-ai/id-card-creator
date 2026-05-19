@@ -80,7 +80,25 @@ async function fetchImageAsDataUrl(url: string): Promise<string> {
   return `data:${ct};base64,${b64}`;
 }
 
-async function ocrWithGemini(dataUrl: string): Promise<string> {
+async function runOcr(dataUrl: string, model: string): Promise<{ nin: string | null; raw_text: string }> {
+  const prompt = `You are extracting the Nigerian National Identification Number (NIN) from this image. The image is one of:
+- A NIN slip (paper printout from NIMC)
+- A NIN card (plastic ID card)
+- A Nigerian international passport (the NIN is printed on the data page, often labelled "NIN" or in the machine-readable zone)
+- Any other government document showing an 11-digit NIN
+
+The NIN is ALWAYS exactly 11 digits. It may be printed:
+- As a single run: 12345678901
+- Spaced in groups: 1234 5678 901 or 123 4567 8901
+- With dashes: 1234-5678-901
+- Faint, low contrast, rotated, or near the edge of the image
+- Labelled "NIN", "NIN No", "National Identification Number", "Identification Number", "ID No"
+
+Look CAREFULLY. Read every number on the document. If you see an 11-digit number anywhere, that is almost certainly the NIN.
+
+Return ONLY a strict JSON object (no markdown, no commentary) in this exact shape:
+{"nin": "<11 digits only, no spaces or dashes, or null if truly not present>", "raw_text": "<all visible text on the document>"}`;
+
   const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -89,14 +107,15 @@ async function ocrWithGemini(dataUrl: string): Promise<string> {
       "Authorization": `Bearer ${LOVABLE_API_KEY}`,
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model,
       messages: [{
         role: "user",
         content: [
-          { type: "text", text: "Read ALL text visible in this image (it's likely a Nigerian National ID). Return the raw text only, no commentary." },
+          { type: "text", text: prompt },
           { type: "image_url", image_url: { url: dataUrl } },
         ],
       }],
+      response_format: { type: "json_object" },
     }),
   });
   if (!resp.ok) {
@@ -106,14 +125,57 @@ async function ocrWithGemini(dataUrl: string): Promise<string> {
     throw new Error(`OCR failed: ${resp.status} ${t.slice(0, 200)}`);
   }
   const j = await resp.json();
-  return j?.choices?.[0]?.message?.content ?? "";
+  const content: string = j?.choices?.[0]?.message?.content ?? "";
+
+  let nin: string | null = null;
+  let raw_text = content;
+  try {
+    const cleaned = content.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+    const parsed = JSON.parse(cleaned);
+    if (parsed && typeof parsed === "object") {
+      raw_text = typeof parsed.raw_text === "string" ? parsed.raw_text : content;
+      if (typeof parsed.nin === "string") {
+        const digits = parsed.nin.replace(/\D/g, "");
+        if (digits.length === 11) nin = digits;
+      }
+    }
+  } catch {
+    // Not JSON — fall through to regex on full content
+  }
+  if (!nin) nin = findNIN(raw_text) ?? findNIN(content);
+  return { nin, raw_text };
 }
 
 function findNIN(text: string): string | null {
   if (!text) return null;
-  // 11 consecutive digits not part of a longer number
-  const matches = text.replace(/[\s-]/g, "").match(/(?<!\d)\d{11}(?!\d)/g);
-  return matches?.[0] ?? null;
+  // Strip whitespace (incl. NBSP), dashes, dots
+  const normalized = text.replace(/[\s\u00A0\-\.]/g, "");
+
+  // 1) Prefer labelled matches: "NIN: 12345678901" etc.
+  const labelled = text.match(/(?:NIN|National\s*Identification\s*(?:Number|No\.?)|Identification\s*Number|ID\s*No\.?)\s*[:#\-]?\s*([\d\s\-\.]{11,20})/i);
+  if (labelled) {
+    const digits = labelled[1].replace(/\D/g, "");
+    if (digits.length >= 11) {
+      const candidate = digits.slice(0, 11);
+      if (isPlausibleNIN(candidate)) return candidate;
+    }
+  }
+
+  // 2) Any standalone 11-digit run (after stripping separators)
+  const matches = normalized.match(/(?<!\d)\d{11}(?!\d)/g) || [];
+  for (const m of matches) {
+    if (isPlausibleNIN(m)) return m;
+  }
+  return matches[0] ?? null;
+}
+
+function isPlausibleNIN(d: string): boolean {
+  if (!/^\d{11}$/.test(d)) return false;
+  // Reject all-same digit
+  if (/^(\d)\1{10}$/.test(d)) return false;
+  // Reject obvious sequential
+  if (d === "12345678901" || d === "01234567890" || d === "10987654321") return false;
+  return true;
 }
 
 Deno.serve(async (req) => {
@@ -222,11 +284,26 @@ Deno.serve(async (req) => {
       try {
         const resolved = resolveImageUrl(row.image_url);
         const dataUrl = await fetchImageAsDataUrl(resolved);
-        const text = await ocrWithGemini(dataUrl);
-        const nin = findNIN(text);
+
+        // Pass 1: fast model
+        let { nin, raw_text } = await runOcr(dataUrl, "google/gemini-2.5-flash");
+
+        // Pass 2: stronger model fallback if Flash missed it
+        if (!nin) {
+          try {
+            const second = await runOcr(dataUrl, "google/gemini-2.5-pro");
+            if (second.nin) {
+              nin = second.nin;
+              raw_text = second.raw_text || raw_text;
+            } else if (second.raw_text && second.raw_text.length > (raw_text?.length || 0)) {
+              raw_text = second.raw_text;
+            }
+          } catch (_) { /* keep Flash result */ }
+        }
+
         const update: any = {
           resolved_image_url: resolved,
-          raw_text: text.slice(0, 4000),
+          raw_text: (raw_text || "").slice(0, 4000),
           nin,
           status: nin ? "extracted" : "no_nin_found",
           error_message: nin ? null : "No 11-digit NIN detected in OCR text",

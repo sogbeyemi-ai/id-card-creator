@@ -1,56 +1,39 @@
-## Goal
+# Improve NIN Extraction Reliability
 
-Two fixes to **Data Sync** so the master sheet stays stable:
+The current extractor uses a single pass of `google/gemini-2.5-flash` with a generic "read all text" prompt, then runs a strict regex for 11 consecutive digits. When a NIN on a slip is spaced (e.g. `1234 5678 901`), partially obscured, slightly rotated, or printed in a low-contrast font, Flash can either skip it or return it broken across characters that the regex misses.
 
-1. **Master row order is fixed.** Rows always appear in the exact order they were uploaded (Excel row 1 stays row 1, row 2 stays row 2, etc.). Never alphabetised, never reshuffled, even after syncs.
-2. **Master's staff name is the source of truth.** When syncing another sheet into the master, the name column in the master is **never overwritten** by the source. Other fields (phone, bank, role, etc.) still update normally — only the name is locked.
+## Changes (all in `supabase/functions/nin-extract/index.ts`)
 
----
+### 1. Stronger OCR prompt
+Replace the generic prompt with a NIN-focused instruction telling the model to:
+- Look specifically for an 11-digit National Identification Number on NIN slips, NIN cards, or international passports.
+- Return strictly a JSON object: `{ "nin": "<11 digits or null>", "raw_text": "<all visible text>" }`.
+- Normalise the NIN by stripping spaces/dashes before returning.
+- Read carefully even if the number is spaced, faint, rotated, or near edges.
 
-## 1. Fix master row order
+Parse the JSON response; fall back to raw text + regex if JSON parsing fails.
 
-**Problem today**: `sync_master_rows` has no explicit ordering column. The UI fetches rows with `.range(...)` and no `.order(...)`, so Postgres can return them in any order — which is why your master appears reshuffled.
+### 2. Smarter NIN parsing (`findNIN`)
+Make the regex tolerant of common slip formatting:
+- Strip spaces, dashes, dots, and non-breaking spaces before matching.
+- Also scan for `NIN[:\s]*([\d\s-]{11,17})` style labelled patterns and clean to digits.
+- Prefer the labelled match if present; otherwise fall back to any standalone 11-digit run.
+- Reject obvious non-NINs (all same digit, sequential like `12345678901`).
 
-**Fix**: add a `row_order` integer column to `sync_master_rows`, populate it on upload in upload order (1, 2, 3, …), and order by it everywhere rows are read or exported.
+### 3. Model fallback for misses
+In `process_row`, if the first pass with `google/gemini-2.5-flash` returns no NIN:
+- Retry once with `google/gemini-2.5-pro` (stronger vision, catches faint/spaced numbers Flash misses).
+- Only then mark the row `no_nin_found`.
 
-- **Migration**: add `row_order int` column, backfill existing rows using `created_at` so current masters keep a stable order, add an index on `(workspace_id, row_order)`.
-- **Edge function `data-sync-master-upload`**: when inserting rows, set `row_order` to the row's position in the uploaded file (starting at 1). When `replace = true`, ordering restarts from 1.
-- **Edge function `data-sync-apply`**: when a `"new"` row is created during a sync, assign `row_order = max(row_order) + 1` for that workspace so it appends to the bottom of the master.
-- **Frontend** (`AdminDataSyncWorkspace.tsx`, `AdminDataSyncRun.tsx`): every `sync_master_rows` read uses `.order("row_order", { ascending: true })`. Excel export ("Export" and "Download updated master") iterates in the same order.
+Keep a small helper `runOcr(dataUrl, model)` to avoid duplication.
 
-Result: whatever order the master was uploaded in is the order you see on screen and in every downloaded `.xlsx` — top to bottom, no alphabetising.
+### 4. Keep everything else as-is
+- No schema changes, no UI changes, no new actions.
+- Batch flow, dedup, retry button all continue to work unchanged.
+- Existing `no_nin_found` rows can be re-extracted via the existing "Retry failed" button — they'll now go through the stronger pipeline.
 
----
+## Files
+- `supabase/functions/nin-extract/index.ts` — update `ocrWithGemini`, `findNIN`, and the `process_row` branch.
 
-## 2. Protect master's staff name during sync
-
-**Problem today**: `data-sync-apply` loops over every mapped header and overwrites the master cell with the source cell — including the name column. So if the source spells the name slightly differently, the master gets rewritten.
-
-**Fix**: in `data-sync-apply`, skip the name column when copying source values onto the matched master row.
-
-- Detect the master's name field using the same alias list already in the file (`full name`, `name`, `staff name`, `employee name`, `fullname`).
-- When applying an `apply` / `merge` decision: for each `[sourceHeader → masterHeader]` mapping, **if `masterHeader` is the name field, skip it**. All other fields still update as before.
-- The `diff` shown in the review screen (`AdminDataSyncRun.tsx`) should also drop name-column entries so users don't see a "name change" proposed that won't actually happen. Done in `data-sync-match` by skipping the name field when building `diff`.
-- `"new"` rows (brand-new staff not in master) are unaffected — they still get the source name, since there's no master name to protect.
-- `name_key` on the master row is **not** recomputed during apply (it stays based on the original master name), so future matching keeps using the locked master name.
-
-Result: master's staff name column is read-only from the sync's perspective. Sync only fills in / updates the **other** columns for that person.
-
----
-
-## Technical notes
-
-- **Schema change**: `ALTER TABLE sync_master_rows ADD COLUMN row_order int;` + backfill + index.
-- **Files edited**:
-  - `supabase/functions/data-sync-master-upload/index.ts` — write `row_order` on insert.
-  - `supabase/functions/data-sync-match/index.ts` — exclude name field from generated `diff`.
-  - `supabase/functions/data-sync-apply/index.ts` — exclude name field from updates; assign `row_order` for new rows.
-  - `src/pages/AdminDataSyncWorkspace.tsx` — order master query + export by `row_order`.
-  - `src/pages/AdminDataSyncRun.tsx` — order master query + "Download updated master" by `row_order`.
-- No new secrets, no UI redesign — purely behavioural fixes.
-
-## Out of scope
-
-- Manual reordering / drag-and-drop of master rows (not requested).
-- Locking other master columns (only the name is protected, per your request).
-- Re-ordering historical masters that were uploaded before this change — they'll be ordered by `created_at` after the backfill, which matches their original upload sequence.
+## Expected outcome
+Slips where the NIN is clearly visible but spaced, faintly printed, or near image edges should now extract on the Flash pass; the Pro fallback catches the remaining hard cases without changing cost for the majority of rows that already work.

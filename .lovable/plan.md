@@ -1,48 +1,56 @@
 ## Goal
-Two improvements to **NIN Extraction**:
-1. Download results as a **styled Excel file** (same look as Data Sync export), not plain CSV.
-2. **Deduplicate by staff name** on upload — keep only the last (most recent) row per name that has an image link.
+
+Two fixes to **Data Sync** so the master sheet stays stable:
+
+1. **Master row order is fixed.** Rows always appear in the exact order they were uploaded (Excel row 1 stays row 1, row 2 stays row 2, etc.). Never alphabetised, never reshuffled, even after syncs.
+2. **Master's staff name is the source of truth.** When syncing another sheet into the master, the name column in the master is **never overwritten** by the source. Other fields (phone, bank, role, etc.) still update normally — only the name is locked.
 
 ---
 
-## 1. Styled Excel download
+## 1. Fix master row order
 
-Replace the current CSV download on `/admin/nin-extraction` with a polished `.xlsx` export that matches the Data Sync look:
+**Problem today**: `sync_master_rows` has no explicit ordering column. The UI fetches rows with `.range(...)` and no `.order(...)`, so Postgres can return them in any order — which is why your master appears reshuffled.
 
-- Frozen header row, navy header background, white bold text
-- Auto-filter on all columns, zebra striping
-- NIN column forced to **text format** so the 11 digits never display as scientific notation
-- Auto-sized columns
-- Filename: `nin-extraction-{label}-{YYYY-MM-DD}.xlsx`
+**Fix**: add a `row_order` integer column to `sync_master_rows`, populate it on upload in upload order (1, 2, 3, …), and order by it everywhere rows are read or exported.
 
-**Columns**: `Row #`, `Full Name`, `NIN`, `Status` (Extracted / No NIN found / Failed / Pending), `Error / Reason`, `Image URL`.
+- **Migration**: add `row_order int` column, backfill existing rows using `created_at` so current masters keep a stable order, add an index on `(workspace_id, row_order)`.
+- **Edge function `data-sync-master-upload`**: when inserting rows, set `row_order` to the row's position in the uploaded file (starting at 1). When `replace = true`, ordering restarts from 1.
+- **Edge function `data-sync-apply`**: when a `"new"` row is created during a sync, assign `row_order = max(row_order) + 1` for that workspace so it appends to the bottom of the master.
+- **Frontend** (`AdminDataSyncWorkspace.tsx`, `AdminDataSyncRun.tsx`): every `sync_master_rows` read uses `.order("row_order", { ascending: true })`. Excel export ("Export" and "Download updated master") iterates in the same order.
 
-Applies to both the **active batch** download and the **history "Download"** action.
-
-CSV fallback removed (XLSX is the only export). Reuses the existing `exportToXlsx` helper in `src/lib/dataSync.ts` — no new dependency.
+Result: whatever order the master was uploaded in is the order you see on screen and in every downloaded `.xlsx` — top to bottom, no alphabetising.
 
 ---
 
-## 2. Dedupe by staff name (keep last row with a link)
+## 2. Protect master's staff name during sync
 
-When a sheet is uploaded / pulled from Google Sheets and the user clicks **"Start extraction"**, before creating rows in the database:
+**Problem today**: `data-sync-apply` loops over every mapped header and overwrites the master cell with the source cell — including the name column. So if the source spells the name slightly differently, the master gets rewritten.
 
-- Group rows by **trimmed, case-insensitive full name**
-- For each name, keep only the **last row** (bottom-most in the sheet) that has a non-empty image link
-- Rows with no name column selected, or with empty names, are kept as-is (no grouping)
-- Show a small notice: *"Removed N duplicate name(s). Kept the most recent submission for each staff."*
+**Fix**: in `data-sync-apply`, skip the name column when copying source values onto the matched master row.
 
-**Where this happens**: in the edge function `nin-extract` inside the `create_batch` action, right after parsing `dataRows` and before inserting into `nin_extraction_rows`. This keeps the logic server-side so any future ingest path benefits too. The function returns `{ batch_id, total, duplicates_removed }` so the UI can show the notice.
+- Detect the master's name field using the same alias list already in the file (`full name`, `name`, `staff name`, `employee name`, `fullname`).
+- When applying an `apply` / `merge` decision: for each `[sourceHeader → masterHeader]` mapping, **if `masterHeader` is the name field, skip it**. All other fields still update as before.
+- The `diff` shown in the review screen (`AdminDataSyncRun.tsx`) should also drop name-column entries so users don't see a "name change" proposed that won't actually happen. Done in `data-sync-match` by skipping the name field when building `diff`.
+- `"new"` rows (brand-new staff not in master) are unaffected — they still get the source name, since there's no master name to protect.
+- `name_key` on the master row is **not** recomputed during apply (it stays based on the original master name), so future matching keeps using the locked master name.
 
-**Preview action** also reports a `duplicates` count so users see the impact before committing.
+Result: master's staff name column is read-only from the sync's perspective. Sync only fills in / updates the **other** columns for that person.
 
 ---
 
 ## Technical notes
-- Frontend: `src/pages/AdminNinExtraction.tsx` — swap `download CSV` handlers for an `exportToXlsx` call; surface the new `duplicates_removed` toast.
-- Backend: `supabase/functions/nin-extract/index.ts` — add a `dedupeByName(rows, nameIdx, imgIdx)` helper, apply in `create_batch` and report counts in `preview`.
-- No schema changes, no new secrets.
+
+- **Schema change**: `ALTER TABLE sync_master_rows ADD COLUMN row_order int;` + backfill + index.
+- **Files edited**:
+  - `supabase/functions/data-sync-master-upload/index.ts` — write `row_order` on insert.
+  - `supabase/functions/data-sync-match/index.ts` — exclude name field from generated `diff`.
+  - `supabase/functions/data-sync-apply/index.ts` — exclude name field from updates; assign `row_order` for new rows.
+  - `src/pages/AdminDataSyncWorkspace.tsx` — order master query + export by `row_order`.
+  - `src/pages/AdminDataSyncRun.tsx` — order master query + "Download updated master" by `row_order`.
+- No new secrets, no UI redesign — purely behavioural fixes.
 
 ## Out of scope
-- Fuzzy name matching (you chose exact, case-insensitive).
-- Dedup on already-saved historical batches (only applies to new uploads).
+
+- Manual reordering / drag-and-drop of master rows (not requested).
+- Locking other master columns (only the name is protected, per your request).
+- Re-ordering historical masters that were uploaded before this change — they'll be ordered by `created_at` after the backfill, which matches their original upload sequence.

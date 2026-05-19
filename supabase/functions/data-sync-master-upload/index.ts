@@ -50,10 +50,24 @@ Deno.serve(async (req) => {
     const nameAliases = ["full name", "name", "staff name", "employee name", "fullname"];
     const nameField = (headers as string[]).find((h) => nameAliases.includes(norm(h))) ?? headers[0];
 
-    const toInsert = (rows as Record<string, any>[]).map((r) => ({
+    // Starting row_order: if replacing, restart at 1; otherwise append after current max.
+    let startOrder = 1;
+    if (!replace) {
+      const { data: maxRow } = await supabase
+        .from("sync_master_rows")
+        .select("row_order")
+        .eq("workspace_id", workspace_id)
+        .order("row_order", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      startOrder = ((maxRow?.row_order as number) ?? 0) + 1;
+    }
+
+    const toInsert = (rows as Record<string, any>[]).map((r, idx) => ({
       workspace_id,
       data: r,
       name_key: nameKey(String(r[nameField] ?? "")),
+      row_order: startOrder + idx,
     }));
 
     for (let i = 0; i < toInsert.length; i += 500) {

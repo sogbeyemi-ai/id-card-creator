@@ -26,6 +26,7 @@ async function fetchMasterRows(workspaceId: string) {
       .from("sync_master_rows" as any)
       .select("id, data")
       .eq("workspace_id", workspaceId)
+      .order("row_order", { ascending: true })
       .range(from, to);
 
     if (error) throw error;
